@@ -1,7 +1,8 @@
 # Nibokuu Anime Scraper API 🚀
 
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Next.js](https://img.shields.io/badge/Framework-Next.js%2016-black?logo=nextdotjs)](https://nextjs.org/)
+[![Vercel](https://img.shields.io/badge/Platform-Vercel-black?logo=vercel)](https://vercel.com/)
+[![Next.js](https://img.shields.io/badge/Framework-Next.js%2016-black?logo=nextjs)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/Language-TypeScript-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Puppeteer](https://img.shields.io/badge/Scraping-Puppeteer%20%26%20Cheerio-lightgrey?logo=puppeteer)](https://pptr.dev/)
 
@@ -206,4 +207,4 @@ Bagi developer yang ingin berkontribusi memodifikasi antarmuka visual (UI) Nibok
 
 ## 📄 Lisensi
 
-Proyek ini dilisensikan di bawah **Lisensi MIT** - lihat file [LICENSE](file:///c:/INFOKOM/project/Nibokuu/anime-scraper-api/LICENSE) untuk informasi lebih detail.
+Proyek ini dilisensikan di bawah **Lisensi MIT** - lihat file [LICENSE](Nibokuu/anime-scraper-api/LICENSE) untuk informasi lebih detail.

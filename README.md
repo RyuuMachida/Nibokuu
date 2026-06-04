@@ -171,7 +171,45 @@ Mengambil ukuran file (file size) dari tautan mirror download pihak ketiga secar
   - `url` (string, **Wajib**): Tautan mirror download target (saat ini mendukung: `krakenfiles.com`, `acefile.co`, dan `mediafire.com`).
 - **Contoh Request:** `/api/mirror-size?url=https://krakenfiles.com/view/xxxxxxxxx/file.html`
 
-### 8. System Monitor & Telemetry Statistics
+### 8. Get Anime Metadata Details
+Mengambil informasi profil mendalam dari anime tertentu, mencakup sinopsis lengkap, skor rating, poster image, genre-genre, serta data spek (Japanese/English title, Studio, Producers, Status, Durasi, Season, dll.).
+- **Rute:** `GET /api/anime-detail`
+- **Parameter Query:**
+  - `url` (string, **Wajib**): URL detail anime Samehadaku (diambil dari bidang `link` endpoint `/api/recent`, `/api/anime`, dsb.).
+- **Cache CDN:** 24 Jam (`s-maxage=86400`)
+- **Contoh Request:** `/api/anime-detail?url=https://samehadaku.email/anime/kimetsu-no-yaiba-the-movie-infinity-castle-part-1-akaza-returns/`
+
+### 9. Get Genres Catalog
+Mengambil katalog semua genre anime yang tersedia.
+- **Rute:** `GET /api/genres`
+- **Cache CDN:** 24 Jam (`s-maxage=86400`)
+- **Contoh Respons:**
+  ```json
+  {
+    "status": "success",
+    "project": "Nibokuu API",
+    "total_genres": 45,
+    "data": [
+      { "text": "Action", "value": "action" },
+      { "text": "Fantasy", "value": "fantasy" }
+    ]
+  }
+  ```
+
+### 10. Get Popular Anime Sidebar
+Mengambil daftar serial anime terpopuler mingguan dari widget sidebar Samehadaku.
+- **Rute:** `GET /api/popular`
+- **Cache CDN:** 4 Jam (`s-maxage=14400`)
+
+### 11. Get Video Stream Direct Link
+Mengurai (*resolve*) link video langsung berformat `.mp4` atau `.m3u8` secara asinkron dari hosting server pemutar (seperti Krakenfiles dan Blogger) untuk memutarnya di native player.
+- **Rute:** `GET /api/stream-link`
+- **Parameter Query:**
+  - `url` (string, **Wajib**): URL mirror streaming target (misal: link Krakenfiles dari `/api/episode`).
+- **Cache CDN:** 1 Jam (`s-maxage=3600`)
+- **Contoh Request:** `/api/stream-link?url=https://krakenfiles.com/view/8ljyTwE66R/file.html`
+
+### 12. System Monitor & Telemetry Statistics
 - **Rute Admin (Wajib Key):** `GET /api/monitor/stats?key=ADMIN_SECRET_KEY`
   - Menyediakan ringkasan log server lengkap dan metrik cache untuk Developer Dashboard.
 - **Rute Publik (Bebas Akses):** `GET /api/monitor/public-stats`

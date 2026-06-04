@@ -1,5 +1,5 @@
-<!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
+# Agent Instructions
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
+- DO NOT use any emojis in code, comments, or user interfaces.
+- For all visual graphical elements, buttons, or icons, strictly use SVG format.
+- This project serves as an API backend using App Router (`app/api`).

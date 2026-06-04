@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# scratch files & dumps
+inspect-*.mjs
+inspect-output.txt
+kraken-html.html
+

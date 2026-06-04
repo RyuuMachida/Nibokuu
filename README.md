@@ -61,6 +61,10 @@ FIREBASE_DATABASE_SECRET=rahasia-token-firebase-anda
 # Secret Key untuk masuk ke Dashboard Developer Monitor (?key=...)
 # Contoh: http://localhost:3000/monitor?key=kunciRahasiaAnda
 ADMIN_SECRET_KEY=kunciRahasiaMonitorAnda
+
+# Remote Puppeteer Browser URL (Wajib untuk Vercel / Serverless hosting)
+# Contoh: wss://chrome.browserless.io?token=KUNCI-API-ANDA
+REMOTE_BROWSER_URL=
 ```
 
 ### 4. Jalankan Development Server

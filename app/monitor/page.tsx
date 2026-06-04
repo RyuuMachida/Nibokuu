@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface RequestLog {
   id: string;
@@ -38,15 +38,64 @@ interface CustomSelectProps {
   onChange: (value: string) => void;
   label: string;
   small?: boolean;
+  showSearch?: boolean;
 }
 
-// Custom drop-down select component
-function CustomSelect({ options, value, onChange, label, small = false }: CustomSelectProps) {
+// Custom drop-down select component with search
+function CustomSelect({ options, value, onChange, label, small = false, showSearch }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
   const selectedOption = options.find((opt) => opt.value === value) || options[0];
 
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 50);
+    } else {
+      setSearchQuery('');
+    }
+  }, [isOpen]);
+
+  const displaySearch = !!showSearch;
+
+  const filteredOptions = options.filter(opt =>
+    opt.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    opt.value.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filteredOptions.length > 0) {
+        onChange(filteredOptions[0].value);
+        setIsOpen(false);
+      }
+    } else if (e.key === 'Escape') {
+      setIsOpen(false);
+    }
+  };
+
   return (
-    <div className="relative flex flex-col gap-0.5 select-none">
+    <div ref={containerRef} className="relative flex flex-col gap-0.5 select-none w-full">
       <span className={`font-mono uppercase text-[#737373] ${small ? 'text-[8px]' : 'text-[9px]'}`}>
         {label}
       </span>
@@ -54,8 +103,7 @@ function CustomSelect({ options, value, onChange, label, small = false }: Custom
         type="button"
         suppressHydrationWarning={true}
         onClick={() => setIsOpen(!isOpen)}
-        onBlur={() => setTimeout(() => setIsOpen(false), 200)}
-        className={`flex items-center justify-between bg-[#0a0a0a] border border-[#222] hover:border-[#333] hover:bg-[#121212] rounded text-[#fafafa] outline-none text-left cursor-pointer transition-all ${
+        className={`flex items-center justify-between bg-[#0a0a0a] border border-[#222] hover:border-[#333] hover:bg-[#121212] rounded text-[#fafafa] outline-none text-left cursor-pointer transition-all w-full ${
           small ? 'h-6 px-2 text-[10px]' : 'h-7 px-2.5 text-xs'
         }`}
       >
@@ -74,20 +122,47 @@ function CustomSelect({ options, value, onChange, label, small = false }: Custom
       </button>
       {isOpen && (
         <div
-          className={`absolute left-0 right-0 z-[100] bg-[#0d0d0d] border border-[#222] rounded shadow-lg overflow-y-auto max-h-[140px] no-scrollbar py-1 top-[42px]`}
+          className={`absolute left-0 right-0 z-[100] bg-[#0d0d0d] border border-[#222] rounded shadow-lg overflow-y-auto no-scrollbar py-1 top-[42px] flex flex-col ${
+            displaySearch ? 'max-h-[220px]' : 'max-h-[140px]'
+          }`}
         >
-          {options.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onMouseDown={() => onChange(opt.value)}
-              className={`w-full text-left hover:bg-[#1a1a1a] cursor-pointer transition-colors block border-none outline-none ${
-                small ? 'px-2 py-1 text-[10px]' : 'px-2.5 py-1.5 text-xs'
-              } ${value === opt.value ? 'text-[#fafafa] bg-[#121212] font-semibold' : 'text-[#a3a3a3]'}`}
-            >
-              {opt.label}
-            </button>
-          ))}
+          {displaySearch && (
+            <div className="sticky top-0 z-[101] bg-[#0d0d0d] p-1 border-b border-[#222] shrink-0">
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="Cari..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="w-full bg-[#121212] border border-[#222] rounded px-2 py-1 text-xs font-mono text-[#f5f5f5] focus:outline-none focus:border-blue-500/50 placeholder-[#525252] h-6"
+              />
+            </div>
+          )}
+          <div className="flex-1 overflow-y-auto no-scrollbar">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  suppressHydrationWarning={true}
+                  onClick={() => {
+                    onChange(opt.value);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full text-left hover:bg-[#1a1a1a] cursor-pointer transition-colors block border-none outline-none ${
+                    small ? 'px-2 py-1 text-[10px]' : 'px-2.5 py-1.5 text-xs'
+                  } ${value === opt.value ? 'text-[#fafafa] bg-[#121212] font-semibold' : 'text-[#a3a3a3]'}`}
+                >
+                  {opt.label}
+                </button>
+              ))
+            ) : (
+              <div className="px-2.5 py-1.5 text-xs font-mono text-[#525252] text-center">
+                Tidak ada hasil
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -140,6 +215,30 @@ export default function MonitorPage() {
   const [selectedMirrorSize, setSelectedMirrorSize] = useState('');
   const [isSizeLoading, setIsSizeLoading] = useState(false);
 
+  const paramsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (paramsRef.current) {
+      paramsRef.current.style.transition = 'none';
+      const oldHeightStyle = paramsRef.current.style.height;
+      paramsRef.current.style.height = 'auto';
+      const targetHeight = paramsRef.current.scrollHeight;
+      paramsRef.current.style.height = oldHeightStyle || '0px';
+      paramsRef.current.offsetHeight;
+      paramsRef.current.style.transition = 'height 300ms cubic-bezier(0.4, 0, 0.2, 1)';
+      paramsRef.current.style.height = `${targetHeight}px`;
+      paramsRef.current.style.overflow = 'hidden';
+      
+      const handleTransitionEnd = () => {
+        if (paramsRef.current) {
+          paramsRef.current.style.height = 'auto';
+          paramsRef.current.style.overflow = 'visible';
+        }
+      };
+      paramsRef.current.addEventListener('transitionend', handleTransitionEnd, { once: true });
+    }
+  }, [selectedEndpoint]);
+
   // Options lists for Select elements
   const ENDPOINT_OPTIONS = [
     { label: 'Recent Updates', value: '/api/recent' },
@@ -148,6 +247,11 @@ export default function MonitorPage() {
     { label: 'Batch List', value: '/api/batch' },
     { label: 'Search Anime', value: '/api/search' },
     { label: 'Get Video Stream & Mirrors', value: '/api/episode' },
+    { label: 'Anime Detail Scraper', value: '/api/anime-detail' },
+    { label: 'Anime Genres List', value: '/api/genres' },
+    { label: 'Popular Anime Listing', value: '/api/popular' },
+    { label: 'Direct Video Stream Resolver', value: '/api/stream-link' },
+    { label: 'Mirror File Size Checker', value: '/api/mirror-size' },
     { label: 'Scrape Updates', value: '/api/scrape' }
   ];
 
@@ -398,6 +502,43 @@ export default function MonitorPage() {
           desc: 'Sama seperti /api/recent, digunakan untuk memicu manual scraping dan membuang cache.',
           ex: []
         };
+      case '/api/anime-detail':
+        return {
+          method: 'GET',
+          path: `/api/anime-detail?url=${resolvedDomain}anime/boruto-naruto-next-generations/`,
+          desc: 'Mengambil informasi lengkap/detail anime, rating, sinopsis, genre, dan metadata dari link anime Samehadaku.',
+          ex: [
+            { label: 'Detail Boruto', fill: () => setPlaygroundParams(prev => ({ ...prev, url: `${resolvedDomain}anime/boruto-naruto-next-generations/` })) }
+          ]
+        };
+      case '/api/genres':
+        return {
+          method: 'GET',
+          path: '/api/genres',
+          desc: 'Mengambil daftar seluruh genre/kategori anime yang ada di database Samehadaku.',
+          ex: []
+        };
+      case '/api/popular':
+        return {
+          method: 'GET',
+          path: '/api/popular',
+          desc: 'Mengambil daftar anime terpopuler yang tampil di sidebar widget Samehadaku.',
+          ex: []
+        };
+      case '/api/stream-link':
+        return {
+          method: 'GET',
+          path: '/api/stream-link?url=https://krakenfiles.com/view/...',
+          desc: 'Mengurai url streaming langsung (direct stream mp4) dari player eksternal (Krakenfiles/Blogger).',
+          ex: []
+        };
+      case '/api/mirror-size':
+        return {
+          method: 'GET',
+          path: '/api/mirror-size?url=https://krakenfiles.com/view/...',
+          desc: 'Mendapatkan info ukuran file video dari server mirror (Krakenfiles, Acefile, Mediafire).',
+          ex: []
+        };
       default:
         return { method: 'GET', path: '', desc: '', ex: [] };
     }
@@ -425,7 +566,7 @@ export default function MonitorPage() {
       if (playgroundParams.day) paramsList.push(`day=${encodeURIComponent(playgroundParams.day)}`);
     } else if (selectedEndpoint === '/api/batch') {
       if (playgroundParams.page) paramsList.push(`page=${encodeURIComponent(playgroundParams.page)}`);
-    } else if (selectedEndpoint === '/api/episode') {
+    } else if (selectedEndpoint === '/api/episode' || selectedEndpoint === '/api/anime-detail' || selectedEndpoint === '/api/stream-link' || selectedEndpoint === '/api/mirror-size') {
       if (playgroundParams.url) paramsList.push(`url=${encodeURIComponent(playgroundParams.url)}`);
     }
 
@@ -984,129 +1125,149 @@ export default function MonitorPage() {
               <form onSubmit={handlePlaygroundSubmit} className="space-y-2.5 shrink-0">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {/* Custom Endpoint Select */}
-                  <CustomSelect
-                    label="Endpoint Route"
-                    options={ENDPOINT_OPTIONS}
-                    value={selectedEndpoint}
-                    onChange={(val) => {
-                      setSelectedEndpoint(val);
-                    }}
-                  />
-
-                  {/* Dynamic Fields */}
-                  {selectedEndpoint === '/api/search' && (
-                    <div className="flex flex-col gap-1">
-                      <label className="font-mono text-[9px] uppercase text-[#737373]">Search Query (q)</label>
-                      <input
-                        type="text"
-                        placeholder="one piece, boruto..."
-                        value={playgroundParams.q}
-                        onChange={(e) => setPlaygroundParams({ ...playgroundParams, q: e.target.value })}
-                        className="px-2.5 py-1 text-xs bg-[#0a0a0a] border border-[#222] hover:border-[#333] rounded text-[#fafafa] outline-none font-mono h-7"
-                        required
-                      />
-                    </div>
-                  )}
-
-                  {selectedEndpoint === '/api/schedule' && (
+                  <div className="col-span-1 sm:col-span-2">
                     <CustomSelect
-                      label="Day Filter"
-                      options={DAY_OPTIONS}
-                      value={playgroundParams.day}
-                      onChange={(val) => setPlaygroundParams({ ...playgroundParams, day: val })}
+                      label="Endpoint Route"
+                      showSearch={true}
+                      options={ENDPOINT_OPTIONS}
+                      value={selectedEndpoint}
+                      onChange={(val) => {
+                        if (paramsRef.current) {
+                          const currentHeight = paramsRef.current.offsetHeight;
+                          paramsRef.current.style.transition = 'none';
+                          paramsRef.current.style.height = `${currentHeight}px`;
+                          paramsRef.current.style.overflow = 'hidden';
+                        }
+                        setSelectedEndpoint(val);
+                      }}
                     />
-                  )}
-
-                  {selectedEndpoint === '/api/batch' && (
-                    <div className="flex flex-col gap-1">
-                      <label className="font-mono text-[9px] uppercase text-[#737373]">Page</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={playgroundParams.page}
-                        onChange={(e) => setPlaygroundParams({ ...playgroundParams, page: e.target.value })}
-                        className="px-2.5 py-1 text-xs bg-[#0a0a0a] border border-[#222] hover:border-[#333] rounded text-[#fafafa] outline-none font-mono h-7"
-                        required
-                      />
-                    </div>
-                  )}
-
-                  {selectedEndpoint === '/api/episode' && (
-                    <div className="flex flex-col gap-1">
-                      <label className="font-mono text-[9px] uppercase text-[#737373]">Episode Page URL</label>
-                      <input
-                        type="text"
-                        placeholder="https://v2.samehadaku.how/..."
-                        value={playgroundParams.url}
-                        onChange={(e) => setPlaygroundParams({ ...playgroundParams, url: e.target.value })}
-                        className="px-2.5 py-1 text-xs bg-[#0a0a0a] border border-[#222] hover:border-[#333] rounded text-[#fafafa] outline-none font-mono h-7 text-[10px]"
-                        required
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Additional filters for /api/anime */}
-                {selectedEndpoint === '/api/anime' && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border-t border-[#222] pt-2">
-                    <div className="flex flex-col gap-1">
-                      <label className="font-mono text-[8px] uppercase text-[#737373]">Title Filter</label>
-                      <input
-                        type="text"
-                        placeholder="naruto..."
-                        value={playgroundParams.title}
-                        onChange={(e) => setPlaygroundParams({ ...playgroundParams, title: e.target.value })}
-                        className="px-1.5 py-0.5 text-[10px] bg-[#0a0a0a] border border-[#222] rounded text-[#fafafa] outline-none font-mono h-6"
-                      />
-                    </div>
-
-                    <CustomSelect
-                      small
-                      label="Status"
-                      options={STATUS_OPTIONS}
-                      value={playgroundParams.status}
-                      onChange={(val) => setPlaygroundParams({ ...playgroundParams, status: val })}
-                    />
-
-                    <CustomSelect
-                      small
-                      label="Type"
-                      options={TYPE_OPTIONS}
-                      value={playgroundParams.type}
-                      onChange={(val) => setPlaygroundParams({ ...playgroundParams, type: val })}
-                    />
-
-                    <CustomSelect
-                      small
-                      label="Sort Order"
-                      options={ORDER_OPTIONS}
-                      value={playgroundParams.order}
-                      onChange={(val) => setPlaygroundParams({ ...playgroundParams, order: val })}
-                    />
-
-                    <div className="flex flex-col gap-1">
-                      <label className="font-mono text-[8px] uppercase text-[#737373]">Genres</label>
-                      <input
-                        type="text"
-                        placeholder="Action,Comedy"
-                        value={playgroundParams.genres}
-                        onChange={(e) => setPlaygroundParams({ ...playgroundParams, genres: e.target.value })}
-                        className="px-1.5 py-0.5 text-[10px] bg-[#0a0a0a] border border-[#222] rounded text-[#fafafa] outline-none font-mono h-6"
-                      />
-                    </div>
-
-                    <div className="flex flex-col gap-1">
-                      <label className="font-mono text-[8px] uppercase text-[#737373]">Page</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={playgroundParams.page}
-                        onChange={(e) => setPlaygroundParams({ ...playgroundParams, page: e.target.value })}
-                        className="px-1.5 py-0.5 text-[10px] bg-[#0a0a0a] border border-[#222] rounded text-[#fafafa] outline-none font-mono h-6"
-                      />
-                    </div>
                   </div>
-                )}
+
+                  {/* Dynamic Fields Container */}
+                  <div
+                    ref={paramsRef}
+                    style={{ overflow: 'visible' }}
+                    className="col-span-1 sm:col-span-2 flex flex-col gap-3"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Dynamic Fields */}
+                      {selectedEndpoint === '/api/search' && (
+                        <div className="flex flex-col gap-1">
+                          <label className="font-mono text-[9px] uppercase text-[#737373]">Search Query (q)</label>
+                          <input
+                            type="text"
+                            placeholder="one piece, boruto..."
+                            value={playgroundParams.q}
+                            onChange={(e) => setPlaygroundParams({ ...playgroundParams, q: e.target.value })}
+                            className="px-2.5 py-1 text-xs bg-[#0a0a0a] border border-[#222] hover:border-[#333] rounded text-[#fafafa] outline-none font-mono h-7"
+                            required
+                          />
+                        </div>
+                      )}
+
+                      {selectedEndpoint === '/api/schedule' && (
+                        <CustomSelect
+                          label="Day Filter"
+                          options={DAY_OPTIONS}
+                          value={playgroundParams.day}
+                          onChange={(val) => setPlaygroundParams({ ...playgroundParams, day: val })}
+                        />
+                      )}
+
+                      {selectedEndpoint === '/api/batch' && (
+                        <div className="flex flex-col gap-1">
+                          <label className="font-mono text-[9px] uppercase text-[#737373]">Page</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={playgroundParams.page}
+                            onChange={(e) => setPlaygroundParams({ ...playgroundParams, page: e.target.value })}
+                            className="px-2.5 py-1 text-xs bg-[#0a0a0a] border border-[#222] hover:border-[#333] rounded text-[#fafafa] outline-none font-mono h-7"
+                            required
+                          />
+                        </div>
+                      )}
+
+                      {(selectedEndpoint === '/api/episode' || selectedEndpoint === '/api/anime-detail' || selectedEndpoint === '/api/stream-link' || selectedEndpoint === '/api/mirror-size') && (
+                        <div className="flex flex-col gap-1">
+                          <label className="font-mono text-[9px] uppercase text-[#737373]">
+                            {selectedEndpoint === '/api/anime-detail' ? 'Detail Page URL' : selectedEndpoint === '/api/stream-link' ? 'Video Player URL' : selectedEndpoint === '/api/mirror-size' ? 'Mirror Link URL' : 'Episode Page URL'}
+                          </label>
+                          <input
+                            type="text"
+                            placeholder={selectedEndpoint === '/api/anime-detail' ? 'https://v2.samehadaku.how/anime/...' : selectedEndpoint === '/api/stream-link' ? 'https://krakenfiles.com/view/...' : selectedEndpoint === '/api/mirror-size' ? 'https://krakenfiles.com/view/...' : 'https://v2.samehadaku.how/...'}
+                            value={playgroundParams.url}
+                            onChange={(e) => setPlaygroundParams({ ...playgroundParams, url: e.target.value })}
+                            className="px-2.5 py-1 text-xs bg-[#0a0a0a] border border-[#222] hover:border-[#333] rounded text-[#fafafa] outline-none font-mono h-7 text-[10px]"
+                            required
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Additional filters for /api/anime */}
+                    {selectedEndpoint === '/api/anime' && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border-t border-[#222] pt-2">
+                        <div className="flex flex-col gap-1">
+                          <label className="font-mono text-[8px] uppercase text-[#737373]">Title Filter</label>
+                          <input
+                            type="text"
+                            placeholder="naruto..."
+                            value={playgroundParams.title}
+                            onChange={(e) => setPlaygroundParams({ ...playgroundParams, title: e.target.value })}
+                            className="px-1.5 py-0.5 text-[10px] bg-[#0a0a0a] border border-[#222] rounded text-[#fafafa] outline-none font-mono h-6"
+                          />
+                        </div>
+
+                        <CustomSelect
+                          small
+                          label="Status"
+                          options={STATUS_OPTIONS}
+                          value={playgroundParams.status}
+                          onChange={(val) => setPlaygroundParams({ ...playgroundParams, status: val })}
+                        />
+
+                        <CustomSelect
+                          small
+                          label="Type"
+                          options={TYPE_OPTIONS}
+                          value={playgroundParams.type}
+                          onChange={(val) => setPlaygroundParams({ ...playgroundParams, type: val })}
+                        />
+
+                        <CustomSelect
+                          small
+                          label="Sort Order"
+                          options={ORDER_OPTIONS}
+                          value={playgroundParams.order}
+                          onChange={(val) => setPlaygroundParams({ ...playgroundParams, order: val })}
+                        />
+
+                        <div className="flex flex-col gap-1">
+                          <label className="font-mono text-[8px] uppercase text-[#737373]">Genres</label>
+                          <input
+                            type="text"
+                            placeholder="Action,Comedy"
+                            value={playgroundParams.genres}
+                            onChange={(e) => setPlaygroundParams({ ...playgroundParams, genres: e.target.value })}
+                            className="px-1.5 py-0.5 text-[10px] bg-[#0a0a0a] border border-[#222] rounded text-[#fafafa] outline-none font-mono h-6"
+                          />
+                        </div>
+
+                        <div className="flex flex-col gap-1">
+                          <label className="font-mono text-[8px] uppercase text-[#737373]">Page</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={playgroundParams.page}
+                            onChange={(e) => setPlaygroundParams({ ...playgroundParams, page: e.target.value })}
+                            className="px-1.5 py-0.5 text-[10px] bg-[#0a0a0a] border border-[#222] rounded text-[#fafafa] outline-none font-mono h-6"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
                 {/* Endpoint Info & Examples Box */}
                 <div className="p-1.5 border border-[#222] bg-[#0d0d0d] rounded flex flex-col gap-0.5">

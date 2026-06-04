@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import LogoLoop from '../components/LogoLoop';
 
 interface PublicStats {
@@ -17,14 +17,63 @@ interface CustomSelectProps {
   onChange: (value: string) => void;
   label?: string;
   small?: boolean;
+  showSearch?: boolean;
 }
 
-function CustomSelect({ options, value, onChange, label, small = false }: CustomSelectProps) {
+function CustomSelect({ options, value, onChange, label, small = false, showSearch }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
   const selectedOption = options.find((opt) => opt.value === value) || options[0];
 
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 50);
+    } else {
+      setSearchQuery('');
+    }
+  }, [isOpen]);
+
+  const displaySearch = !!showSearch;
+
+  const filteredOptions = options.filter(opt =>
+    opt.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    opt.value.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filteredOptions.length > 0) {
+        onChange(filteredOptions[0].value);
+        setIsOpen(false);
+      }
+    } else if (e.key === 'Escape') {
+      setIsOpen(false);
+    }
+  };
+
   return (
-    <div className="relative flex flex-col gap-1 select-none w-full">
+    <div ref={containerRef} className="relative flex flex-col gap-1 select-none w-full">
       {label && (
         <span className={`font-mono uppercase text-[#737373] ${small ? 'text-[8px]' : 'text-[9px]'}`}>
           {label}
@@ -34,7 +83,6 @@ function CustomSelect({ options, value, onChange, label, small = false }: Custom
         type="button"
         suppressHydrationWarning={true}
         onClick={() => setIsOpen(!isOpen)}
-        onBlur={() => setTimeout(() => setIsOpen(false), 200)}
         className={`flex items-center justify-between bg-[#121212] border border-[#222] hover:border-[#333] rounded text-[#fafafa] outline-none text-left cursor-pointer transition-all w-full ${
           small ? 'h-7 px-2 text-[10px]' : 'h-8 px-3 text-xs'
         }`}
@@ -54,21 +102,47 @@ function CustomSelect({ options, value, onChange, label, small = false }: Custom
       </button>
       {isOpen && (
         <div
-          className="absolute left-0 right-0 z-[100] bg-[#0d0d0d] border border-[#222] rounded shadow-lg overflow-y-auto max-h-[140px] no-scrollbar py-1 top-[42px]"
+          className={`absolute left-0 right-0 z-[100] bg-[#0d0d0d] border border-[#222] rounded shadow-lg overflow-y-auto no-scrollbar py-1 top-[42px] flex flex-col ${
+            displaySearch ? 'max-h-[220px]' : 'max-h-[140px]'
+          }`}
         >
-          {options.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              suppressHydrationWarning={true}
-              onMouseDown={() => onChange(opt.value)}
-              className={`w-full text-left hover:bg-[#1a1a1a] cursor-pointer transition-colors block border-none outline-none ${
-                small ? 'px-2.5 py-1 text-[10px]' : 'px-3 py-1.5 text-xs'
-              } ${value === opt.value ? 'text-[#fafafa] bg-[#121212] font-semibold' : 'text-[#a3a3a3]'}`}
-            >
-              {opt.label}
-            </button>
-          ))}
+          {displaySearch && (
+            <div className="sticky top-0 z-[101] bg-[#0d0d0d] p-1 border-b border-[#222] shrink-0">
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="Cari..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="w-full bg-[#121212] border border-[#222] rounded px-2.5 py-1 text-xs font-mono text-[#f5f5f5] focus:outline-none focus:border-blue-500/50 placeholder-[#525252] h-7"
+              />
+            </div>
+          )}
+          <div className="flex-1 overflow-y-auto no-scrollbar">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  suppressHydrationWarning={true}
+                  onClick={() => {
+                    onChange(opt.value);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full text-left hover:bg-[#1a1a1a] cursor-pointer transition-colors block border-none outline-none ${
+                    small ? 'px-2.5 py-1 text-[10px]' : 'px-3 py-1.5 text-xs'
+                  } ${value === opt.value ? 'text-[#fafafa] bg-[#121212] font-semibold' : 'text-[#a3a3a3]'}`}
+                >
+                  {opt.label}
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-xs font-mono text-[#525252] text-center">
+                Tidak ada hasil
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -122,6 +196,56 @@ const ENDPOINTS = [
     description: 'Mengekstrak data media player eksternal dan mirror stream Samehadaku.',
     params: [
       { name: 'url', label: 'URL Detail Episode Samehadaku', type: 'text', placeholder: 'Pilih preset atau masukkan link episode', default: '' }
+    ]
+  },
+  {
+    path: '/api/anime-detail',
+    name: 'Anime Detail Scraper',
+    method: 'GET',
+    description: 'Mengambil detail informasi anime (rating, genre, sinopsis, metadata) berdasarkan URL detail Samehadaku.',
+    params: [
+      { name: 'url', label: 'URL Detail Anime Samehadaku', type: 'text', placeholder: 'https://v2.samehadaku.how/anime/tate-no-yuusha-no-nariagari-season-3/', default: '' }
+    ]
+  },
+  {
+    path: '/api/genres',
+    name: 'Anime Genres List',
+    method: 'GET',
+    description: 'Mengambil seluruh daftar kategori/genre anime yang tersedia.',
+    params: []
+  },
+  {
+    path: '/api/popular',
+    name: 'Popular Anime Listing',
+    method: 'GET',
+    description: 'Mengambil daftar anime terpopuler berdasarkan data widget sidebar.',
+    params: []
+  },
+  {
+    path: '/api/batch',
+    name: 'Anime Batch Listing',
+    method: 'GET',
+    description: 'Mengambil daftar anime rilis Batch berdasarkan pagination.',
+    params: [
+      { name: 'page', label: 'Halaman', type: 'number', placeholder: '1', default: '1' }
+    ]
+  },
+  {
+    path: '/api/stream-link',
+    name: 'Direct Video Stream Resolver',
+    method: 'GET',
+    description: 'Mengurai/mengekstrak url file video streaming langsung dari link player (Krakenfiles/Blogger).',
+    params: [
+      { name: 'url', label: 'URL Stream Player', type: 'text', placeholder: 'https://krakenfiles.com/view/... atau Blogger link', default: '' }
+    ]
+  },
+  {
+    path: '/api/mirror-size',
+    name: 'Mirror File Size Checker',
+    method: 'GET',
+    description: 'Mendapatkan ukuran file video dari tautan mirror (Krakenfiles, Acefile, Mediafire).',
+    params: [
+      { name: 'url', label: 'URL Mirror Link', type: 'text', placeholder: 'https://krakenfiles.com/view/... atau https://acefile.co/f/...', default: '' }
     ]
   }
 ];
@@ -187,6 +311,42 @@ export default function PublicLandingClient() {
 
   // Back to Top button state
   const [showScrollTop, setShowScrollTop] = useState(false);
+
+  const paramsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (paramsRef.current) {
+      // 1. Temporarily clear transition to read target height
+      paramsRef.current.style.transition = 'none';
+      
+      // Save current height style (which is the old height we set in handleEndpointChange/loadPreset)
+      const oldHeightStyle = paramsRef.current.style.height;
+      
+      // Set to auto to measure the new height of the new content
+      paramsRef.current.style.height = 'auto';
+      const targetHeight = paramsRef.current.scrollHeight;
+      
+      // Set it back to the old height so transition can start from there
+      paramsRef.current.style.height = oldHeightStyle || '0px';
+      
+      // Force reflow
+      paramsRef.current.offsetHeight;
+      
+      // Apply smooth transition and animate to the new target height
+      paramsRef.current.style.transition = 'height 300ms cubic-bezier(0.4, 0, 0.2, 1)';
+      paramsRef.current.style.height = `${targetHeight}px`;
+      paramsRef.current.style.overflow = 'hidden';
+      
+      const handleTransitionEnd = () => {
+        if (paramsRef.current) {
+          paramsRef.current.style.height = 'auto';
+          paramsRef.current.style.overflow = 'visible';
+        }
+      };
+      
+      paramsRef.current.addEventListener('transitionend', handleTransitionEnd, { once: true });
+    }
+  }, [sandboxEndpoint]);
 
   const fetchPublicStats = async () => {
     try {
@@ -351,13 +511,19 @@ curl_close($ch);
   };
 
   const handleEndpointChange = (path: string) => {
+    if (paramsRef.current) {
+      const currentHeight = paramsRef.current.offsetHeight;
+      paramsRef.current.style.transition = 'none';
+      paramsRef.current.style.height = `${currentHeight}px`;
+      paramsRef.current.style.overflow = 'hidden';
+    }
     setSandboxEndpoint(path);
     const ep = ENDPOINTS.find(e => e.path === path);
     if (ep) {
       const initialParams: Record<string, string> = {};
       ep.params.forEach(p => {
         if (p.name === 'url' && p.default === '') {
-          initialParams[p.name] = presetEpisodeUrl || 'https://samehadaku.email/';
+          initialParams[p.name] = presetEpisodeUrl || 'https://v2.samehadaku.how/';
         } else {
           initialParams[p.name] = p.default || '';
         }
@@ -367,6 +533,12 @@ curl_close($ch);
   };
 
   const loadPreset = (endpoint: string, params: Record<string, string>) => {
+    if (paramsRef.current) {
+      const currentHeight = paramsRef.current.offsetHeight;
+      paramsRef.current.style.transition = 'none';
+      paramsRef.current.style.height = `${currentHeight}px`;
+      paramsRef.current.style.overflow = 'hidden';
+    }
     setSandboxEndpoint(endpoint);
     setSandboxParams(params);
     // Focus or trigger immediate execution
@@ -800,7 +972,7 @@ curl_close($ch);
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             
             {/* Form Builder (Left Panel) */}
-            <div className="lg:col-span-5 bg-[#0d0d0d] border border-[#222] rounded-lg p-5 flex flex-col gap-3 sm:gap-4 shadow-sm h-auto" id="sandbox-form">
+            <div className="lg:col-span-5 bg-[#0d0d0d] border border-[#222] rounded-lg p-5 flex flex-col gap-3 sm:gap-4 shadow-sm lg:min-h-[430px] h-auto" id="sandbox-form">
               <span className="text-[10px] font-mono uppercase tracking-wider text-[#737373] border-b border-[#222] pb-2 font-bold block">
                 Request Parameters Builder
               </span>
@@ -810,6 +982,7 @@ curl_close($ch);
                   label="Target Endpoint"
                   value={sandboxEndpoint}
                   onChange={handleEndpointChange}
+                  showSearch={true}
                   options={ENDPOINTS.map(ep => ({
                     label: `${ep.method} ${ep.path} (${ep.name})`,
                     value: ep.path
@@ -818,7 +991,11 @@ curl_close($ch);
               </div>
 
               {/* Dynamic inputs based on parameters */}
-              <div className="h-auto shrink-0 flex flex-col gap-3 overflow-y-auto no-scrollbar py-2 border-y border-[#222]/40 max-h-[130px]">
+              <div 
+                ref={paramsRef}
+                style={{ overflow: 'visible' }}
+                className="h-auto shrink-0 flex flex-col gap-3 py-2 border-y border-[#222]/40"
+              >
                 {ENDPOINTS.find(e => e.path === sandboxEndpoint)?.params.map(p => (
                   <div key={p.name} className="flex flex-col gap-1.5">
                     <label className="text-[10px] font-mono text-[#a3a3a3] flex items-center justify-between">

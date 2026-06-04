@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
             // Remove <b> tag to extract remaining text cleanly
             const clonedEl = $(el).clone();
             clonedEl.find('b').remove();
-            
+
             // Check if there are tag links (like producers, studios, season)
             const links: string[] = [];
             clonedEl.find('a').each((_, aEl) => {

@@ -61,10 +61,6 @@ FIREBASE_DATABASE_SECRET=rahasia-token-firebase-anda
 # Secret Key untuk masuk ke Dashboard Developer Monitor (?key=...)
 # Contoh: http://localhost:3000/monitor?key=kunciRahasiaAnda
 ADMIN_SECRET_KEY=kunciRahasiaMonitorAnda
-
-# Vercel KV REST API fallback (jika tidak menggunakan Firebase)
-KV_REST_API_URL=
-KV_REST_API_TOKEN=
 ```
 
 ### 4. Jalankan Development Server

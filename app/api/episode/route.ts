@@ -197,6 +197,53 @@ export async function GET(request: NextRequest) {
         await browser.close();
         browser = null; // Mark as closed
 
+        // If this is the parent anime detail page, also extract and cache the metadata
+        if (isAnimeDetail) {
+          const rating = $('.rating strong, .score, [itemprop="ratingValue"]').text().trim();
+          const synopsis = $('.entry-content, [itemprop="description"], .desc, .sinopsis').first().text().trim();
+          const image = $('.thumb img, .poster img').first().attr('src') || $('.thumb img, .poster img').first().attr('data-src');
+          
+          const genres: string[] = [];
+          $('.genre-info a').each((_, el) => {
+            const gText = $(el).text().trim();
+            if (gText) genres.push(gText);
+          });
+
+          const metadataInfo: Record<string, string | string[]> = {};
+          $('.spe span, .info-content span, .info_anime span').each((_, el) => {
+            const rawKey = $(el).find('b').text().replace(':', '').trim();
+            if (rawKey) {
+              const clonedEl = $(el).clone();
+              clonedEl.find('b').remove();
+              const links: string[] = [];
+              clonedEl.find('a').each((_, aEl) => {
+                const aText = $(aEl).text().trim();
+                if (aText) links.push(aText);
+              });
+              const cleanKey = rawKey.toLowerCase();
+              if (links.length > 0) {
+                metadataInfo[cleanKey] = links;
+              } else {
+                metadataInfo[cleanKey] = clonedEl.text().replace(/^\s*:\s*/, '').trim();
+              }
+            }
+          });
+
+          const detailCacheKey = `anime-detail:${targetUrl.trim().toLowerCase()}`;
+          const detailData = {
+            status: 'success',
+            project: 'Nibokuu API',
+            title,
+            rating,
+            synopsis,
+            image,
+            genres,
+            metadata: metadataInfo
+          };
+          // Cache anime detail for 30 days (2592000 seconds)
+          await setToCache(detailCacheKey, detailData, 2592000);
+          console.log(`[Episode Route] Auto-populated anime-detail cache for: ${targetUrl}`);
+        }
 
         // Check for alternative lists with class .server or .mirror
         $('.server, .mirror').find('a').each((_, el) => {
@@ -289,28 +336,47 @@ export async function GET(request: NextRequest) {
         const ttl = isAnimeDetail ? 2592000 : 31536000;
         await setToCache(cacheKey, responseData, ttl);
 
-        // Trigger background updates for parent anime in parallel asynchronously
+        // Trigger background updates for parent anime asynchronously if needed
         if (parentAnimeUrl) {
           const origin = request.nextUrl.origin;
           const secret = process.env.ADMIN_SECRET_KEY || '';
           const authHeader = secret ? `Bearer ${secret}` : '';
-          
-          console.log(`Pemicu background sync untuk anime induk: ${parentAnimeUrl}`);
-          
-          const triggerUpdate = async (endpointPath: string) => {
-            try {
-              await fetch(`${origin}${endpointPath}?url=${encodeURIComponent(parentAnimeUrl)}&bypass_cache=true`, {
-                headers: authHeader ? { 'Authorization': authHeader } : {},
-                signal: AbortSignal.timeout(15000)
-              });
-            } catch (err: any) {
-              console.warn(`Background pre-cache failed for ${endpointPath}:`, err.message);
-            }
-          };
+          const parentCacheKey = `episode:${parentAnimeUrl.trim().toLowerCase()}`;
 
-          // Execute concurrently in background without awaiting
-          triggerUpdate('/api/anime-detail');
-          triggerUpdate('/api/episode');
+          // Avoid blocking response, do cache check and update in background
+          (async () => {
+            try {
+              const cachedParent = await getFromCache<any>(parentCacheKey);
+              let needsUpdate = true;
+
+              if (cachedParent && Array.isArray(cachedParent.episodes)) {
+                // Check if the current episode link is already listed in the parent episodes cache
+                const normalizedTarget = targetUrl.trim().toLowerCase();
+                const isEpisodeListed = cachedParent.episodes.some((ep: any) => 
+                  ep.link && ep.link.trim().toLowerCase() === normalizedTarget
+                );
+
+                if (isEpisodeListed) {
+                  console.log(`[Cache Optimizer] Parent anime cache for ${parentAnimeUrl} is already up to date (lists current episode). Skipping remote browser launch.`);
+                  needsUpdate = false;
+                }
+              }
+
+              if (needsUpdate) {
+                console.log(`[Cache Optimizer] Parent anime cache for ${parentAnimeUrl} is missing or outdated. Triggering single background sync...`);
+                // Fetch `/api/episode` for the parent anime page with `bypass_cache=true`.
+                // This single scrape will populate BOTH `episode:${parentAnimeUrl}` and `anime-detail:${parentAnimeUrl}`.
+                fetch(`${origin}/api/episode?url=${encodeURIComponent(parentAnimeUrl)}&bypass_cache=true`, {
+                  headers: authHeader ? { 'Authorization': authHeader } : {},
+                  signal: AbortSignal.timeout(25000)
+                }).catch((err) => {
+                  console.warn(`[Cache Optimizer] Background parent sync failed:`, err.message);
+                });
+              }
+            } catch (err: any) {
+              console.warn('[Cache Optimizer] Error checking parent cache:', err.message);
+            }
+          })();
         }
 
         return responseData;

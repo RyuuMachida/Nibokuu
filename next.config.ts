@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  outputFileTracingIncludes: {
+    '/api/**/*': [
+      'node_modules/puppeteer-extra-plugin-stealth/**/*',
+      'node_modules/puppeteer-extra/**/*'
+    ],
+  },
   serverExternalPackages: [
     "puppeteer", 
     "puppeteer-core",

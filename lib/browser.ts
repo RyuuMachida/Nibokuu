@@ -1,3 +1,8 @@
+import 'is-plain-object';
+import 'shallow-clone';
+import 'kind-of';
+import 'for-own';
+
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 

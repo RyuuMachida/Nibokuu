@@ -1,16 +1,33 @@
-import 'is-plain-object';
-import 'shallow-clone';
-import 'kind-of';
-import 'for-own';
+import puppeteer from 'puppeteer-core';
+import * as fs from 'fs';
+import * as os from 'os';
 
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-
-puppeteer.use(StealthPlugin());
+function getLocalChromePath(): string {
+  const platform = os.platform();
+  if (platform === 'win32') {
+    const paths = [
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`
+    ];
+    for (const p of paths) {
+      if (fs.existsSync(p)) return p;
+    }
+  } else if (platform === 'darwin') {
+    const p = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+    if (fs.existsSync(p)) return p;
+  } else {
+    const paths = ['/usr/bin/google-chrome', '/usr/bin/chromium-browser'];
+    for (const p of paths) {
+      if (fs.existsSync(p)) return p;
+    }
+  }
+  return '';
+}
 
 /**
- * Launches a Puppeteer browser instance with stealth plugins and default sandbox bypass arguments.
- * Automatically injects proxy settings if process.env.PROXY_SERVER is configured.
+ * Launches a Puppeteer browser instance using puppeteer-core.
+ * Connects to remote Browserless.io in production, or launches local Chrome in development.
  */
 export async function launchBrowser() {
   const remoteUrl = process.env.REMOTE_BROWSER_URL || process.env.BROWSERLESS_URL;
@@ -29,9 +46,15 @@ export async function launchBrowser() {
     args.push(`--proxy-server=${process.env.PROXY_SERVER}`);
   }
 
-  console.log('Launching local browser instance...');
+  const executablePath = getLocalChromePath();
+  if (!executablePath) {
+    throw new Error('Local Google Chrome / Chromium installation not found. Please install Chrome or configure REMOTE_BROWSER_URL.');
+  }
+
+  console.log(`Launching local browser from: ${executablePath}`);
   return puppeteer.launch({
     headless: true,
+    executablePath,
     args
   });
 }

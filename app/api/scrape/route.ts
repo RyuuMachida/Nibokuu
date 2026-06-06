@@ -18,18 +18,33 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now();
   const endpoint = request.nextUrl.pathname + request.nextUrl.search;
 
+  const { searchParams } = new URL(request.url);
+  const bypassCache = searchParams.get('bypass_cache') === 'true' || searchParams.get('force') === 'true';
+
+  let isAuth = false;
+  const expectedKey = process.env.ADMIN_SECRET_KEY;
+  if (bypassCache && expectedKey) {
+    const authHeader = request.headers.get('Authorization');
+    const secretParam = searchParams.get('secret');
+    if (authHeader === `Bearer ${expectedKey}` || secretParam === expectedKey) {
+      isAuth = true;
+    }
+  }
+
   // 1. Check Cache first
   const cacheKey = 'recent_updates';
-  const cachedData = await getFromCache<any>(cacheKey);
-  if (cachedData) {
-    console.log('Serving recent updates from cache.');
-    await logRequest(endpoint, 'GET', '200 OK', 200, Date.now() - startTime, true);
-    return NextResponse.json(cachedData, {
-      status: 200,
-      headers: {
-        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=59',
-      },
-    });
+  if (!bypassCache || !isAuth) {
+    const cachedData = await getFromCache<any>(cacheKey);
+    if (cachedData) {
+      console.log('Serving recent updates from cache.');
+      await logRequest(endpoint, 'GET', '200 OK', 200, Date.now() - startTime, true);
+      return NextResponse.json(cachedData, {
+        status: 200,
+        headers: {
+          'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=59',
+        },
+      });
+    }
   }
 
   try {

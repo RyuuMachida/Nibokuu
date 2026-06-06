@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const targetUrl = searchParams.get('url');
+  const bypassCache = searchParams.get('bypass_cache') === 'true' || searchParams.get('force') === 'true';
 
   if (!targetUrl) {
     const latency = Date.now() - startTime;
@@ -31,18 +32,30 @@ export async function GET(request: NextRequest) {
     }, { status: 400 });
   }
 
+  let isAuth = false;
+  const expectedKey = process.env.ADMIN_SECRET_KEY;
+  if (bypassCache && expectedKey) {
+    const authHeader = request.headers.get('Authorization');
+    const secretParam = searchParams.get('secret');
+    if (authHeader === `Bearer ${expectedKey}` || secretParam === expectedKey) {
+      isAuth = true;
+    }
+  }
+
   // 1. Check Cache first
   const cacheKey = `episode:${targetUrl.trim().toLowerCase()}`;
-  const cachedData = await getFromCache<any>(cacheKey);
-  if (cachedData) {
-    console.log(`Serving episode details for "${targetUrl}" from cache.`);
-    await logRequest(endpoint, 'GET', '200 OK', 200, Date.now() - startTime, true);
-    return NextResponse.json(cachedData, {
-      status: 200,
-      headers: {
-        'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=59',
-      },
-    });
+  if (!bypassCache || !isAuth) {
+    const cachedData = await getFromCache<any>(cacheKey);
+    if (cachedData) {
+      console.log(`Serving episode details for "${targetUrl}" from cache.`);
+      await logRequest(endpoint, 'GET', '200 OK', 200, Date.now() - startTime, true);
+      return NextResponse.json(cachedData, {
+        status: 200,
+        headers: {
+          'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=59',
+        },
+      });
+    }
   }
 
   try {
@@ -230,7 +243,35 @@ export async function GET(request: NextRequest) {
         // Reverse to display episodes from 1 to max episode
         episodes.reverse();
 
-        console.log(`Successfully scraped: "${title}" (isAnimeDetail: ${isAnimeDetail}, episodes: ${episodes.length})`);
+        // Try to find parent anime URL if this is a single episode page
+        let parentAnimeUrl = '';
+        if (!isAnimeDetail) {
+          const parentAnimeSelectors = [
+            '.breadcrumbs a[href*="/anime/"]',
+            '.breadcrumb a[href*="/anime/"]',
+            'a[href*="/anime/"]:contains("Semua Episode")',
+            '.entbar a[href*="/anime/"]',
+            '.c-breadcrumb a[href*="/anime/"]',
+          ];
+          for (const sel of parentAnimeSelectors) {
+            const href = $(sel).first().attr('href');
+            if (href && !href.includes('/daftar-anime-2/')) {
+              parentAnimeUrl = href;
+              break;
+            }
+          }
+          if (!parentAnimeUrl) {
+            $('a[href*="/anime/"]').each((_, el) => {
+              const href = $(el).attr('href');
+              if (href && !href.includes('/daftar-anime-2/') && !href.includes('/genres/')) {
+                parentAnimeUrl = href;
+                return false; // break loop
+              }
+            });
+          }
+        }
+
+        console.log(`Successfully scraped: "${title}" (isAnimeDetail: ${isAnimeDetail}, episodes: ${episodes.length}, parentAnimeUrl: ${parentAnimeUrl || 'none'})`);
 
         const responseData = {
           status: 'success',
@@ -239,11 +280,38 @@ export async function GET(request: NextRequest) {
           isAnimeDetail,
           iframeUrl: iframeUrl || undefined,
           mirrors,
-          episodes
+          episodes,
+          parentAnimeUrl: parentAnimeUrl || undefined
         };
 
-        // Store in cache for 24 hours (86400 seconds)
-        await setToCache(cacheKey, responseData, 86400);
+        // Episode details (isAnimeDetail = false) are static, so cache for 1 year (31536000 seconds)
+        // Anime details (isAnimeDetail = true) are cached for 30 days (2592000 seconds)
+        const ttl = isAnimeDetail ? 2592000 : 31536000;
+        await setToCache(cacheKey, responseData, ttl);
+
+        // Trigger background updates for parent anime in parallel asynchronously
+        if (parentAnimeUrl) {
+          const origin = request.nextUrl.origin;
+          const secret = process.env.ADMIN_SECRET_KEY || '';
+          const authHeader = secret ? `Bearer ${secret}` : '';
+          
+          console.log(`Pemicu background sync untuk anime induk: ${parentAnimeUrl}`);
+          
+          const triggerUpdate = async (endpointPath: string) => {
+            try {
+              await fetch(`${origin}${endpointPath}?url=${encodeURIComponent(parentAnimeUrl)}&bypass_cache=true`, {
+                headers: authHeader ? { 'Authorization': authHeader } : {},
+                signal: AbortSignal.timeout(15000)
+              });
+            } catch (err: any) {
+              console.warn(`Background pre-cache failed for ${endpointPath}:`, err.message);
+            }
+          };
+
+          // Execute concurrently in background without awaiting
+          triggerUpdate('/api/anime-detail');
+          triggerUpdate('/api/episode');
+        }
 
         return responseData;
       } catch (innerError: any) {

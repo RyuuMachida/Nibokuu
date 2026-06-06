@@ -32,7 +32,10 @@ async function runRedisCommand(command: any[]): Promise<any> {
 
 // Sanitize keys for Firebase RTDB
 function sanitizeKey(key: string): string {
-  return encodeURIComponent(key).replace(/\./g, '%2E');
+  return key
+    .replace(/https?:\/\//gi, '')
+    .replace(/[^a-zA-Z0-9-_]/g, '_')
+    .toLowerCase();
 }
 
 /**

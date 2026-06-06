@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "cheerio": "^1.2.0",
+    "is-plain-object": "^5.0.0",
     "next": "16.2.0",
     "puppeteer": "^25.1.0",
     "puppeteer-extra": "^3.3.6",

@@ -67,7 +67,7 @@ ADMIN_SECRET_KEY=kunciRahasiaMonitorAnda
 REMOTE_BROWSER_URL=
 ```
 
-### 4. Jalankan Development Server
+### 4. Jalankan Development ServerZ
 ```bash
 npm run dev
 ```
@@ -115,7 +115,7 @@ Mengambil daftar anime rilis terbaru.
         "title": "One Piece Episode 1110",
         "episode": "1110",
         "thumbnail": "https://img.samehadaku.vip/cover.jpg",
-        "link": "https://v2.samehadaku.how/one-piece-episode-1110/"
+        "link": "https://samehadaku.li/one-piece-episode-1110/"
       }
     ]
   }
@@ -148,7 +148,7 @@ Mengambil informasi lengkap suatu episode atau halaman anime, termasuk link stre
 - **Parameter Query:**
   - `url` (string, **Wajib**): URL target absolut halaman Samehadaku (diambil dari bidang `link` endpoint `/api/recent` atau `/api/anime`).
 - **Cache CDN:** 24 Jam (`s-maxage=86400`)
-- **Contoh Request:** `/api/episode?url=https://v2.samehadaku.how/one-piece-episode-1110/`
+- **Contoh Request:** `/api/episode?url=https://samehadaku.li/one-piece-episode-1110/`
 
 ### 5. Get Batch Downloads
 Mengambil daftar rilis anime Batch (unduhan paket penuh seluruh episode dalam satu file).
@@ -177,7 +177,7 @@ Mengambil informasi profil mendalam dari anime tertentu, mencakup sinopsis lengk
 - **Parameter Query:**
   - `url` (string, **Wajib**): URL detail anime Samehadaku (diambil dari bidang `link` endpoint `/api/recent`, `/api/anime`, dsb.).
 - **Cache CDN:** 24 Jam (`s-maxage=86400`)
-- **Contoh Request:** `/api/anime-detail?url=https://v2.samehadaku.how/anime/kimetsu-no-yaiba-the-movie-infinity-castle-part-1-akaza-returns/`
+- **Contoh Request:** `/api/anime-detail?url=https://samehadaku.li/anime/kimetsu-no-yaiba-the-movie-infinity-castle-part-1-akaza-returns/`
 
 ### 9. Get Genres Catalog
 Mengambil katalog semua genre anime yang tersedia.

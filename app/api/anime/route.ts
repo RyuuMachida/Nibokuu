@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
 import * as fs from 'fs';
 import * as path from 'path';
-import { resolveDomain } from '@/lib/resolver';
+import { resolveDomain, sanitizeSamehadakuUrl } from '@/lib/resolver';
 import { launchBrowser } from '@/lib/browser';
 import { getFromCache, setToCache, coalesceScrape } from '@/lib/cache';
 import { logRequest } from '@/lib/logger';
@@ -14,6 +14,7 @@ interface AnimeListItem {
   type: string;
   score: string;
   genres: string[];
+  episodes_api_link?: string;
 }
 
 export async function GET(request: NextRequest) {
@@ -29,11 +30,27 @@ export async function GET(request: NextRequest) {
   const pageParam = searchParams.get('page') || '1';
   const page = parseInt(pageParam, 10) || 1;
 
+  const activeDomain = await getFromCache<string>('resolved_samehadaku_domain') || 'https://v2.samehadaku.how/';
+
   // 1. Check Cache first
   const cacheKey = `anime:${title.trim().toLowerCase()}:${status.trim().toLowerCase()}:${type.trim().toLowerCase()}:${order.trim().toLowerCase()}:${genres.trim().toLowerCase()}:${page}`;
   const cachedData = await getFromCache<any>(cacheKey);
   if (cachedData) {
     console.log('Serving anime list from cache.');
+    
+    // Sanitize cached links on the fly to reflect any domain changes instantly
+    if (cachedData.data && Array.isArray(cachedData.data)) {
+      cachedData.data = cachedData.data.map((item: any) => {
+        const cleanLink = sanitizeSamehadakuUrl(item.link, activeDomain);
+        return {
+          ...item,
+          link: cleanLink,
+          image: sanitizeSamehadakuUrl(item.image, activeDomain),
+          episodes_api_link: `/api/episodes?url=${encodeURIComponent(cleanLink || '')}`
+        };
+      });
+    }
+    
     await logRequest(endpoint, 'GET', '200 OK', 200, Date.now() - startTime, true);
     return NextResponse.json(cachedData, {
       status: 200,
@@ -119,13 +136,16 @@ export async function GET(request: NextRequest) {
 
           if (itemTitle && link) {
             const cleanTitle = itemTitle.replace(/\s+/g, ' ').trim();
+            const cleanLink = sanitizeSamehadakuUrl(link, activeDomain);
+            const cleanImage = sanitizeSamehadakuUrl(image, activeDomain);
             animeList.push({
               title: cleanTitle,
-              link,
-              image,
+              link: cleanLink,
+              image: cleanImage,
               type: itemType,
               score,
-              genres: itemGenres
+              genres: itemGenres,
+              episodes_api_link: `/api/episodes?url=${encodeURIComponent(cleanLink || '')}`
             });
           }
         });

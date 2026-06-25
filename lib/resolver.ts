@@ -23,7 +23,7 @@ export async function resolveDomain(browser: any): Promise<string> {
       return cachedAgain;
     }
 
-    const fallbackUrl = 'https://samehadaku.li/';
+    const fallbackUrl = 'https://v2.samehadaku.how/';
     let targetUrl = fallbackUrl;
 
     try {
@@ -56,13 +56,7 @@ export async function resolveDomain(browser: any): Promise<string> {
 
       if (foundUrl) {
         let tempUrl = foundUrl.endsWith('/') ? foundUrl : foundUrl + '/';
-        // Override outdated samehadaku.how domains to the new active samehadaku.li
-        if (tempUrl.includes('samehadaku.how')) {
-          console.log('Resolved domain contains samehadaku.how (outdated). Overriding to samehadaku.li');
-          targetUrl = 'https://samehadaku.li/';
-        } else {
-          targetUrl = tempUrl;
-        }
+        targetUrl = tempUrl;
         console.log(`Dynamic domain resolution succeeded. Target URL: ${targetUrl}`);
         // Cache target URL for 24 hours (86400 seconds)
         await setToCache(cacheKey, targetUrl, 86400);
@@ -77,4 +71,15 @@ export async function resolveDomain(browser: any): Promise<string> {
     return targetUrl;
   });
 }
+
+/**
+ * Sanitizes any Samehadaku URL by replacing outdated/incorrect domains (like samehadaku.how, samehadaku.care, samehadaku.li)
+ * with the currently active resolved domain.
+ */
+export function sanitizeSamehadakuUrl(url: string | undefined, activeDomain: string): string | undefined {
+  if (!url) return url;
+  const cleanActive = activeDomain.endsWith('/') ? activeDomain.slice(0, -1) : activeDomain;
+  return url.replace(/https?:\/\/(?:[a-z0-9-]+\.)?samehadaku\.(?:how|care|li)/gi, cleanActive);
+}
+
 

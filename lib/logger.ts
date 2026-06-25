@@ -59,9 +59,12 @@ export async function logRequest(
   // Format current local time HH:MM:SS
   const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
 
+  // Sanitize sensitive query parameters (like secrets or keys) from the endpoint path before logging
+  const sanitizedEndpoint = endpoint.replace(/([?&])(secret|cron_secret|key|token)=[^&]*/gi, '$1$2=[MASKED]');
+
   const logEntry: RequestLog = {
     id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    endpoint,
+    endpoint: sanitizedEndpoint,
     method,
     status,
     statusCode,

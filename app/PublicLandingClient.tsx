@@ -208,6 +208,15 @@ const ENDPOINTS = [
     ]
   },
   {
+    path: '/api/episodes',
+    name: 'Anime Episodes List Scraper',
+    method: 'GET',
+    description: 'Mengambil daftar episode lengkap dari suatu anime berdasarkan URL detail Samehadaku.',
+    params: [
+      { name: 'url', label: 'URL Detail Anime Samehadaku', type: 'text', placeholder: 'https://v2.samehadaku.how/anime/tate-no-yuusha-no-nariagari-season-3/', default: '' }
+    ]
+  },
+  {
     path: '/api/genres',
     name: 'Anime Genres List',
     method: 'GET',
@@ -599,7 +608,7 @@ curl_close($ch);
   };
 
   const handleInteractiveLinkClick = (url: string) => {
-    const targetEndpoint = '/api/episode';
+    const targetEndpoint = url.includes('/anime/') ? '/api/episodes' : '/api/episode';
     const targetParams = { url };
     setSandboxEndpoint(targetEndpoint);
     setSandboxParams(targetParams);

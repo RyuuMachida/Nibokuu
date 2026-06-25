@@ -7,16 +7,10 @@ import { getFromCache, setToCache, coalesceScrape } from '@/lib/cache';
 import { logRequest } from '@/lib/logger';
 import { sanitizeSamehadakuUrl } from '@/lib/resolver';
 
-interface DetailResponse {
-  status: string;
-  project: string;
+interface EpisodeItem {
+  episode: string;
   title: string;
-  rating: string;
-  synopsis: string;
-  image: string | undefined;
-  genres: string[];
-  metadata: Record<string, string | string[]>;
-  episodes?: Array<{ episode: string; title: string; link: string }>;
+  link: string;
 }
 
 export async function GET(request: NextRequest) {
@@ -37,6 +31,10 @@ export async function GET(request: NextRequest) {
     }, { status: 400 });
   }
 
+  const activeDomain = await getFromCache<string>('resolved_samehadaku_domain') || 'https://v2.samehadaku.how/';
+  // Sanitize input URL first
+  const sanitizedTargetUrl = sanitizeSamehadakuUrl(targetUrl, activeDomain) || targetUrl;
+
   let isAuth = false;
   const expectedKey = process.env.ADMIN_SECRET_KEY;
   if (bypassCache && expectedKey) {
@@ -47,19 +45,14 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const activeDomain = await getFromCache<string>('resolved_samehadaku_domain') || 'https://v2.samehadaku.how/';
-  // Sanitize input targetUrl
-  const sanitizedTargetUrl = sanitizeSamehadakuUrl(targetUrl, activeDomain) || targetUrl;
-
   // 1. Check Cache first
-  const cacheKey = `anime-detail:${sanitizedTargetUrl.trim().toLowerCase()}`;
+  const cacheKey = `episodes:${sanitizedTargetUrl.trim().toLowerCase()}`;
   if (!bypassCache || !isAuth) {
     const cachedData = await getFromCache<any>(cacheKey);
     if (cachedData) {
-      console.log(`Serving anime details for "${sanitizedTargetUrl}" from cache.`);
+      console.log(`Serving episodes list for "${sanitizedTargetUrl}" from cache.`);
       
-      // Sanitize cached URLs on the fly to reflect any domain changes instantly
-      cachedData.image = sanitizeSamehadakuUrl(cachedData.image, activeDomain);
+      // Sanitize cache results on-the-fly to cover any domain updates
       if (cachedData.episodes && Array.isArray(cachedData.episodes)) {
         cachedData.episodes = cachedData.episodes.map((ep: any) => ({
           ...ep,
@@ -90,12 +83,9 @@ export async function GET(request: NextRequest) {
         console.log(`Navigating to target anime detail page: ${sanitizedTargetUrl}`);
         await page.goto(sanitizedTargetUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
 
-        // Wait for main content wrapper to load
-        await page.waitForFunction(
-          () => !!(document.querySelector('.anime-info') || document.querySelector('.infox') || document.querySelector('.entry-title')),
-          { timeout: 20000 }
-        ).catch((err) => {
-          console.warn('Timeout waiting for detail selectors. Parsing current DOM state.', err.message);
+        console.log('Waiting for episode list...');
+        await page.waitForSelector('.eplister, .listeps', { timeout: 15000 }).catch((err) => {
+          console.warn('Timeout waiting for episode list selector.', err.message);
         });
 
         const htmlData = await page.content();
@@ -104,55 +94,13 @@ export async function GET(request: NextRequest) {
 
         // 3. Parse HTML using Cheerio
         const $ = cheerio.load(htmlData);
-
+        
         // Extract Title
-        const title = $('.anime-info h1.entry-title, h1.entry-title').first().text().trim();
-
-        // Extract Rating
-        const rating = $('.rating strong, .score, [itemprop="ratingValue"]').text().trim();
-
-        // Extract Synopsis
-        const synopsis = $('.entry-content, [itemprop="description"], .desc, .sinopsis').first().text().trim();
-
-        // Extract Poster Image
-        const image = $('.thumb img, .poster img').first().attr('src') || $('.thumb img, .poster img').first().attr('data-src');
-
-        // Extract Genres
-        const genres: string[] = [];
-        $('.genre-info a').each((_, el) => {
-          const gText = $(el).text().trim();
-          if (gText) {
-            genres.push(gText);
-          }
-        });
-
-        // Extract Spe/Metadata
-        const metadata: Record<string, string | string[]> = {};
-        $('.spe span, .info-content span, .info_anime span').each((_, el) => {
-          const rawKey = $(el).find('b').text().replace(':', '').trim();
-          if (rawKey) {
-            // Remove <b> tag to extract remaining text cleanly
-            const clonedEl = $(el).clone();
-            clonedEl.find('b').remove();
-
-            // Check if there are tag links (like producers, studios, season)
-            const links: string[] = [];
-            clonedEl.find('a').each((_, aEl) => {
-              const aText = $(aEl).text().trim();
-              if (aText) links.push(aText);
-            });
-
-            const cleanKey = rawKey.toLowerCase();
-            if (links.length > 0) {
-              metadata[cleanKey] = links;
-            } else {
-              metadata[cleanKey] = clonedEl.text().replace(/^\s*:\s*/, '').trim(); // Remove leading colon if present
-            }
-          }
-        });
+        const title = $('.anime-info h1.entry-title, h1.entry-title').first().text().trim() || 
+                      $('title').text().replace('- Samehadaku', '').trim();
 
         // Extract episodes list from .eplister / .listeps
-        const episodes: Array<{ episode: string; title: string; link: string }> = [];
+        const episodes: EpisodeItem[] = [];
         $('.eplister li, .listeps li').each((_, el) => {
           const anchor = $(el).find('a');
           const epTitle = anchor.find('.epl-title').text().trim() || $(el).find('.epsleft .lchx a').text().trim() || anchor.text().trim();
@@ -166,23 +114,21 @@ export async function GET(request: NextRequest) {
             });
           }
         });
+        
+        // Reverse to display episodes from 1 to max episode
         episodes.reverse();
 
-        console.log(`Successfully scraped anime details: "${title}" (episodes: ${episodes.length})`);
+        console.log(`Successfully scraped episodes list: "${title}" (episodes: ${episodes.length})`);
 
-        const responseData: DetailResponse = {
+        const responseData = {
           status: 'success',
           project: 'Nibokuu API',
           title,
-          rating,
-          synopsis,
-          image: sanitizeSamehadakuUrl(image, activeDomain),
-          genres,
-          metadata,
+          total_episodes: episodes.length,
           episodes
         };
 
-        // Store in cache for 24 hours (86400 seconds)
+        // Cache episodes list for 24 hours (86400 seconds)
         await setToCache(cacheKey, responseData, 86400);
 
         return responseData;
@@ -198,8 +144,8 @@ export async function GET(request: NextRequest) {
                 fs.mkdirSync(publicDir, { recursive: true });
               }
 
-              const screenshotPath = path.join(publicDir, 'debug-detail-error.png');
-              const htmlPath = path.join(publicDir, 'debug-detail-error.html');
+              const screenshotPath = path.join(publicDir, 'debug-episodes-error.png');
+              const htmlPath = path.join(publicDir, 'debug-episodes-error.html');
 
               await activePage.screenshot({ path: screenshotPath, fullPage: true });
               const htmlContent = await activePage.content();
@@ -231,7 +177,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error("Scraping Error:", error);
+    console.error("Episodes Scraping Error:", error);
 
     const latency = Date.now() - startTime;
     await logRequest(endpoint, 'GET', '500 Internal Server Error', 500, latency, false);
@@ -239,8 +185,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       status: 'error',
       project: 'Nibokuu API',
-      message: error.message || 'An error occurred during anime detail scraping.',
-      diagnostics: 'Diagnostics saved in public directory (debug-detail-error.png and debug-detail-error.html).'
+      message: error.message || 'An error occurred during episodes list scraping.',
+      diagnostics: 'Diagnostics saved in public directory (debug-episodes-error.png and debug-episodes-error.html).'
     }, { status: 500 });
   }
 }

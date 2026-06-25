@@ -248,6 +248,7 @@ export default function MonitorPage() {
     { label: 'Search Anime', value: '/api/search' },
     { label: 'Get Video Stream & Mirrors', value: '/api/episode' },
     { label: 'Anime Detail Scraper', value: '/api/anime-detail' },
+    { label: 'Anime Episodes List Scraper', value: '/api/episodes' },
     { label: 'Anime Genres List', value: '/api/genres' },
     { label: 'Popular Anime Listing', value: '/api/popular' },
     { label: 'Direct Video Stream Resolver', value: '/api/stream-link' },
@@ -378,6 +379,8 @@ export default function MonitorPage() {
       setPlaygroundParams((prev) => ({ ...prev, day: 'monday' }));
     } else if (selectedEndpoint === '/api/episode') {
       setPlaygroundParams((prev) => ({ ...prev, url: `${resolvedDomain}gachiakuta-episode-1/` }));
+    } else if (selectedEndpoint === '/api/episodes') {
+      setPlaygroundParams((prev) => ({ ...prev, url: `${resolvedDomain}anime/boruto-naruto-next-generations/` }));
     } else if (selectedEndpoint === '/api/anime') {
       setPlaygroundParams((prev) => ({ 
         ...prev, 
@@ -509,6 +512,15 @@ export default function MonitorPage() {
           desc: 'Mengambil informasi lengkap/detail anime, rating, sinopsis, genre, dan metadata dari link anime Samehadaku.',
           ex: [
             { label: 'Detail Boruto', fill: () => setPlaygroundParams(prev => ({ ...prev, url: `${resolvedDomain}anime/boruto-naruto-next-generations/` })) }
+          ]
+        };
+      case '/api/episodes':
+        return {
+          method: 'GET',
+          path: `/api/episodes?url=${resolvedDomain}anime/boruto-naruto-next-generations/`,
+          desc: 'Mengambil daftar episode lengkap dari suatu anime berdasarkan URL detail Samehadaku.',
+          ex: [
+            { label: 'Episode Boruto', fill: () => setPlaygroundParams(prev => ({ ...prev, url: `${resolvedDomain}anime/boruto-naruto-next-generations/` })) }
           ]
         };
       case '/api/genres':
@@ -1188,14 +1200,14 @@ export default function MonitorPage() {
                         </div>
                       )}
 
-                      {(selectedEndpoint === '/api/episode' || selectedEndpoint === '/api/anime-detail' || selectedEndpoint === '/api/stream-link' || selectedEndpoint === '/api/mirror-size') && (
+                      {(selectedEndpoint === '/api/episode' || selectedEndpoint === '/api/anime-detail' || selectedEndpoint === '/api/episodes' || selectedEndpoint === '/api/stream-link' || selectedEndpoint === '/api/mirror-size') && (
                         <div className="flex flex-col gap-1">
                           <label className="font-mono text-[9px] uppercase text-[#737373]">
-                            {selectedEndpoint === '/api/anime-detail' ? 'Detail Page URL' : selectedEndpoint === '/api/stream-link' ? 'Video Player URL' : selectedEndpoint === '/api/mirror-size' ? 'Mirror Link URL' : 'Episode Page URL'}
+                            {(selectedEndpoint === '/api/anime-detail' || selectedEndpoint === '/api/episodes') ? 'Detail Page URL' : selectedEndpoint === '/api/stream-link' ? 'Video Player URL' : selectedEndpoint === '/api/mirror-size' ? 'Mirror Link URL' : 'Episode Page URL'}
                           </label>
                           <input
                             type="text"
-                            placeholder={selectedEndpoint === '/api/anime-detail' ? 'https://v2.samehadaku.how/anime/...' : selectedEndpoint === '/api/stream-link' ? 'https://krakenfiles.com/view/...' : selectedEndpoint === '/api/mirror-size' ? 'https://krakenfiles.com/view/...' : 'https://v2.samehadaku.how/...'}
+                            placeholder={(selectedEndpoint === '/api/anime-detail' || selectedEndpoint === '/api/episodes') ? 'https://v2.samehadaku.how/anime/...' : selectedEndpoint === '/api/stream-link' ? 'https://krakenfiles.com/view/...' : selectedEndpoint === '/api/mirror-size' ? 'https://krakenfiles.com/view/...' : 'https://v2.samehadaku.how/...'}
                             value={playgroundParams.url}
                             onChange={(e) => setPlaygroundParams({ ...playgroundParams, url: e.target.value })}
                             className="px-2.5 py-1 text-xs bg-[#0a0a0a] border border-[#222] hover:border-[#333] rounded text-[#fafafa] outline-none font-mono h-7 text-[10px]"

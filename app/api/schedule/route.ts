@@ -104,24 +104,33 @@ export async function GET(request: NextRequest) {
           const rawData = await pageInstance.evaluate(async (dayVal) => {
             try {
               const response = await fetch(`/wp-json/custom/v1/all-schedule?perpage=20&day=${dayVal}`);
+              if (!response.ok) return { error: `HTTP ${response.status}` };
               return await response.json();
             } catch (err: any) {
               return { error: err.message };
             }
           }, dayParam);
 
-          if (rawData.error) {
-            throw new Error(`Browser context fetch failed: ${rawData.error}`);
+          if (rawData.error || !Array.isArray(rawData)) {
+            console.warn(`Schedule API not available: ${rawData?.error || 'not array'}`);
+            responseData = {
+              status: 'success',
+              project: 'Nibokuu API',
+              message: 'Jadwal rilis tidak tersedia di domain active Samehadaku.',
+              day: dayParam,
+              total: 0,
+              data: []
+            };
+          } else {
+            const items = rawData.map(formatScheduleItem);
+            responseData = {
+              status: 'success',
+              project: 'Nibokuu API',
+              day: dayParam,
+              total: items.length,
+              data: items
+            };
           }
-
-          const items = Array.isArray(rawData) ? rawData.map(formatScheduleItem) : [];
-          responseData = {
-            status: 'success',
-            project: 'Nibokuu API',
-            day: dayParam,
-            total: items.length,
-            data: items
-          };
         } else {
           console.log('Fetching schedule for all days in parallel...');
           const rawAllDays = await pageInstance.evaluate(async () => {
@@ -129,6 +138,7 @@ export async function GET(request: NextRequest) {
             const fetches = days.map(async (d) => {
               try {
                 const response = await fetch(`/wp-json/custom/v1/all-schedule?perpage=20&day=${d}`);
+                if (!response.ok) return { day: d, data: [] };
                 const json = await response.json();
                 return { day: d, data: json };
               } catch (err) {
@@ -147,9 +157,11 @@ export async function GET(request: NextRequest) {
             };
           });
 
+          const hasData = grouped.some(g => g.total > 0);
           responseData = {
             status: 'success',
             project: 'Nibokuu API',
+            ...(hasData ? {} : { message: 'Jadwal rilis tidak tersedia di domain active Samehadaku.' }),
             total_days: grouped.length,
             data: grouped
           };

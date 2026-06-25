@@ -5,6 +5,7 @@ import * as path from 'path';
 import { launchBrowser } from '@/lib/browser';
 import { getFromCache, setToCache, coalesceScrape } from '@/lib/cache';
 import { logRequest } from '@/lib/logger';
+import { sanitizeSamehadakuUrl } from '@/lib/resolver';
 
 interface MirrorData {
   name: string;
@@ -42,12 +43,34 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const activeDomain = await getFromCache<string>('resolved_samehadaku_domain') || 'https://v2.samehadaku.how/';
+  // Sanitize input targetUrl
+  const sanitizedTargetUrl = sanitizeSamehadakuUrl(targetUrl, activeDomain) || targetUrl;
+
   // 1. Check Cache first
-  const cacheKey = `episode:${targetUrl.trim().toLowerCase()}`;
+  const cacheKey = `episode:${sanitizedTargetUrl.trim().toLowerCase()}`;
   if (!bypassCache || !isAuth) {
     const cachedData = await getFromCache<any>(cacheKey);
     if (cachedData) {
-      console.log(`Serving episode details for "${targetUrl}" from cache.`);
+      console.log(`Serving episode details for "${sanitizedTargetUrl}" from cache.`);
+      
+      // Sanitize cached URLs on the fly to reflect any domain changes instantly
+      if (cachedData.parentAnimeUrl) {
+        cachedData.parentAnimeUrl = sanitizeSamehadakuUrl(cachedData.parentAnimeUrl, activeDomain);
+      }
+      if (cachedData.episodes && Array.isArray(cachedData.episodes)) {
+        cachedData.episodes = cachedData.episodes.map((ep: any) => ({
+          ...ep,
+          link: sanitizeSamehadakuUrl(ep.link, activeDomain)
+        }));
+      }
+      if (cachedData.mirrors && Array.isArray(cachedData.mirrors)) {
+        cachedData.mirrors = cachedData.mirrors.map((m: any) => ({
+          ...m,
+          link: m.link ? sanitizeSamehadakuUrl(m.link, activeDomain) : undefined
+        }));
+      }
+      
       await logRequest(endpoint, 'GET', '200 OK', 200, Date.now() - startTime, true);
       return NextResponse.json(cachedData, {
         status: 200,
@@ -68,14 +91,14 @@ export async function GET(request: NextRequest) {
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-        const isAnimeDetail = targetUrl.includes('/anime/');
+        const isAnimeDetail = sanitizedTargetUrl.includes('/anime/');
 
-        console.log(`Navigating to target page: ${targetUrl}`);
-        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        console.log(`Navigating to target page: ${sanitizedTargetUrl}`);
+        await page.goto(sanitizedTargetUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
 
         if (isAnimeDetail) {
           console.log('Waiting for episode list...');
-          await page.waitForSelector('.listeps', { timeout: 15000 }).catch((err) => {
+          await page.waitForSelector('.eplister, .listeps', { timeout: 15000 }).catch((err) => {
             console.warn('Timeout waiting for episode list selector.', err.message);
           });
         } else {
@@ -272,17 +295,17 @@ export async function GET(request: NextRequest) {
           });
         });
 
-        // Extract episodes list from .listeps
+        // Extract episodes list from .eplister / .listeps
         const episodes: { title: string; link: string | undefined; episode: string }[] = [];
-        $('.listeps li').each((_, el) => {
-          const anchor = $(el).find('.epsleft .lchx a');
-          const epTitle = anchor.text().trim();
+        $('.eplister li, .listeps li').each((_, el) => {
+          const anchor = $(el).find('a');
+          const epTitle = anchor.find('.epl-title').text().trim() || $(el).find('.epsleft .lchx a').text().trim() || anchor.text().trim();
           const link = anchor.attr('href');
-          const epNum = $(el).find('.epsright .eps a').text().trim() || $(el).find('.epsright .eps').text().trim();
+          const epNum = anchor.find('.epl-num').text().trim() || $(el).find('.epsright .eps a').text().trim() || $(el).find('.epsright .eps').text().trim();
           if (link) {
             episodes.push({
               title: epTitle || `Episode ${epNum}`,
-              link,
+              link: sanitizeSamehadakuUrl(link, activeDomain) || link,
               episode: epNum
             });
           }
@@ -316,6 +339,10 @@ export async function GET(request: NextRequest) {
               }
             });
           }
+        }
+
+        if (parentAnimeUrl) {
+          parentAnimeUrl = sanitizeSamehadakuUrl(parentAnimeUrl, activeDomain) || parentAnimeUrl;
         }
 
         console.log(`Successfully scraped: "${title}" (isAnimeDetail: ${isAnimeDetail}, episodes: ${episodes.length}, parentAnimeUrl: ${parentAnimeUrl || 'none'})`);

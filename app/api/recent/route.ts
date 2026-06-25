@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
 import * as fs from 'fs';
 import * as path from 'path';
-import { resolveDomain } from '@/lib/resolver';
+import { resolveDomain, sanitizeSamehadakuUrl } from '@/lib/resolver';
 import { launchBrowser } from '@/lib/browser';
 import { getFromCache, setToCache, coalesceScrape } from '@/lib/cache';
 import { logRequest } from '@/lib/logger';
@@ -31,12 +31,24 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const activeDomain = await getFromCache<string>('resolved_samehadaku_domain') || 'https://v2.samehadaku.how/';
+
   // 1. Check Cache first
   const cacheKey = 'recent_updates';
   if (!bypassCache || !isAuth) {
     const cachedData = await getFromCache<any>(cacheKey);
     if (cachedData) {
       console.log('Serving recent updates from cache.');
+      
+      // Sanitize cached links on the fly to reflect any domain changes instantly
+      if (cachedData.data && Array.isArray(cachedData.data)) {
+        cachedData.data = cachedData.data.map((item: any) => ({
+          ...item,
+          link: sanitizeSamehadakuUrl(item.link, activeDomain),
+          thumbnail: sanitizeSamehadakuUrl(item.thumbnail, activeDomain)
+        }));
+      }
+      
       await logRequest(endpoint, 'GET', '200 OK', 200, Date.now() - startTime, true);
       return NextResponse.json(cachedData, {
         status: 200,
@@ -155,11 +167,17 @@ export async function GET(request: NextRequest) {
 
         console.log(`Scraping complete. Found ${animeList.length} items.`);
 
+        const sanitizedList = animeList.map(item => ({
+          ...item,
+          link: sanitizeSamehadakuUrl(item.link, activeDomain),
+          thumbnail: sanitizeSamehadakuUrl(item.thumbnail, activeDomain)
+        }));
+
         const responseData = {
           status: 'success',
           project: 'Nibokuu API',
-          total_data: animeList.length,
-          data: animeList
+          total_data: sanitizedList.length,
+          data: sanitizedList
         };
 
         // Store in cache for 5 minutes (300 seconds)

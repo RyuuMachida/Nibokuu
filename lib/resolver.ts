@@ -23,7 +23,7 @@ export async function resolveDomain(browser: any): Promise<string> {
       return cachedAgain;
     }
 
-    const fallbackUrl = 'https://v2.samehadaku.how/';
+    const fallbackUrl = 'https://samehadaku.li/';
     let targetUrl = fallbackUrl;
 
     try {
@@ -55,7 +55,14 @@ export async function resolveDomain(browser: any): Promise<string> {
       });
 
       if (foundUrl) {
-        targetUrl = foundUrl.endsWith('/') ? foundUrl : foundUrl + '/';
+        let tempUrl = foundUrl.endsWith('/') ? foundUrl : foundUrl + '/';
+        // Override outdated samehadaku.how domains to the new active samehadaku.li
+        if (tempUrl.includes('samehadaku.how')) {
+          console.log('Resolved domain contains samehadaku.how (outdated). Overriding to samehadaku.li');
+          targetUrl = 'https://samehadaku.li/';
+        } else {
+          targetUrl = tempUrl;
+        }
         console.log(`Dynamic domain resolution succeeded. Target URL: ${targetUrl}`);
         // Cache target URL for 24 hours (86400 seconds)
         await setToCache(cacheKey, targetUrl, 86400);

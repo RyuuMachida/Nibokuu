@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
 
         // Wait briefly for content to populate
         await pageInstance.waitForFunction(
-          () => !!(document.querySelector('.animepost') || document.querySelector('article.animpost') || document.querySelector('.page-title') || document.querySelector('.notfound')),
+          () => !!(document.querySelector('.animepost') || document.querySelector('article.animpost') || document.querySelector('.bsx') || document.querySelector('.page-title') || document.querySelector('.notfound')),
           { timeout: 20000 }
         ).catch((err) => {
           console.warn('Timeout waiting for anime list selectors, parsing current DOM state.', err.message);
@@ -96,13 +96,16 @@ export async function GET(request: NextRequest) {
         const $ = cheerio.load(htmlData);
         const animeList: AnimeListItem[] = [];
 
-        $('.animepost').each((_, element) => {
-          const itemTitle = $(element).find('.title h2').text().trim() || 
+        $('.animepost, .bsx').each((_, element) => {
+          const itemTitle = $(element).find('.title h2, .tt h2').first().text().trim() || 
+                            $(element).find('a').attr('oldtitle')?.trim() || 
                             $(element).find('a').attr('title')?.trim() || 
-                            $(element).find('.title').text().trim();
+                            $(element).find('img').attr('title')?.trim() ||
+                            $(element).find('img').attr('alt')?.trim() ||
+                            $(element).find('.title, .tt').first().text().trim();
           const link = $(element).find('a').attr('href');
-          const image = $(element).find('img').attr('src');
-          const itemType = $(element).find('.type').first().text().trim();
+          const image = $(element).find('img').attr('src') || $(element).find('img').attr('data-src');
+          const itemType = $(element).find('.type, .typez').first().text().trim();
           const score = $(element).find('.score').text().trim();
 
           // Extract genres from the tooltip inside the same article item if available

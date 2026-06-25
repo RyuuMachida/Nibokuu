@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const query = searchParams.get('q');
+  const bypassCache = searchParams.get('bypass_cache') === 'true' || searchParams.get('force') === 'true';
 
   if (!query) {
     const latency = Date.now() - startTime;
@@ -32,18 +33,30 @@ export async function GET(request: NextRequest) {
     }, { status: 400 });
   }
 
+  let isAuth = false;
+  const expectedKey = process.env.ADMIN_SECRET_KEY;
+  if (bypassCache && expectedKey) {
+    const authHeader = request.headers.get('Authorization');
+    const secretParam = searchParams.get('secret');
+    if (authHeader === `Bearer ${expectedKey}` || secretParam === expectedKey) {
+      isAuth = true;
+    }
+  }
+
   // 1. Check Cache first
   const cacheKey = `search:${query.trim().toLowerCase()}`;
-  const cachedData = await getFromCache<any>(cacheKey);
-  if (cachedData) {
-    console.log(`Serving search query "${query}" from cache.`);
-    await logRequest(endpoint, 'GET', '200 OK', 200, Date.now() - startTime, true);
-    return NextResponse.json(cachedData, {
-      status: 200,
-      headers: {
-        'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=59',
-      },
-    });
+  if (!bypassCache || !isAuth) {
+    const cachedData = await getFromCache<any>(cacheKey);
+    if (cachedData) {
+      console.log(`Serving search query "${query}" from cache.`);
+      await logRequest(endpoint, 'GET', '200 OK', 200, Date.now() - startTime, true);
+      return NextResponse.json(cachedData, {
+        status: 200,
+        headers: {
+          'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=59',
+        },
+      });
+    }
   }
 
   try {
@@ -66,7 +79,7 @@ export async function GET(request: NextRequest) {
 
         // Wait briefly for content to populate
         await page.waitForFunction(
-          () => !!(document.querySelector('.animepost') || document.querySelector('article.animpost') || document.querySelector('.page-title') || document.querySelector('.notfound')),
+          () => !!(document.querySelector('.animepost') || document.querySelector('article.animpost') || document.querySelector('.bsx') || document.querySelector('.page-title') || document.querySelector('.notfound')),
           { timeout: 15000 }
         ).catch((err) => {
           console.warn('Timeout waiting for search selectors, parsing current DOM state.', err.message);
@@ -80,15 +93,19 @@ export async function GET(request: NextRequest) {
         const $ = cheerio.load(htmlData);
         const searchResults: SearchResult[] = [];
 
-        $('.animepost').each((_, element) => {
-          const title = $(element).find('.title h2').text().trim() || 
+        const posts = $('.animepost, .bsx');
+        posts.each((_, element) => {
+          const title = $(element).find('.title h2, .tt h2').first().text().trim() || 
+                        $(element).find('a').attr('oldtitle')?.trim() || 
                         $(element).find('a').attr('title')?.trim() || 
-                        $(element).find('.title').text().trim();
+                        $(element).find('img').attr('title')?.trim() ||
+                        $(element).find('img').attr('alt')?.trim() ||
+                        $(element).find('.title, .tt').first().text().trim();
           const link = $(element).find('a').attr('href');
-          const image = $(element).find('img').attr('src');
+          const image = $(element).find('img').attr('src') || $(element).find('img').attr('data-src');
           
           // Select the first type class text or from data
-          const type = $(element).find('.type').first().text().trim();
+          const type = $(element).find('.type, .typez').first().text().trim();
           const score = $(element).find('.score').text().trim();
 
           if (title && link) {

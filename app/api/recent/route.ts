@@ -114,17 +114,41 @@ export async function GET(request: NextRequest) {
             }
           });
         }
-        // Try Fallback selector 2: .bsx
+        // Try Fallback selector 2: .latesthome .bsx (new Samehadaku.li layout)
+        else if ($('.latesthome .bsx').length > 0) {
+          console.log('Scraping using fallback selector (.latesthome .bsx)...');
+          $('.latesthome .bsx').each((_, element) => {
+            const title = $(element).find('a').attr('oldtitle')?.trim() || 
+                          $(element).find('img').attr('title')?.trim() || 
+                          $(element).find('img').attr('alt')?.trim() ||
+                          $(element).find('.tt').text().trim() ||
+                          $(element).find('a').attr('title')?.trim();
+            const link = $(element).find('a').attr('href');
+            const thumbnail = $(element).find('img').attr('src') || $(element).find('img').attr('data-src');
+            const episode = $(element).find('.epx').text().trim() || $(element).find('.epxs').text().trim();
+
+            if (title && link) {
+              const cleanTitle = title.replace(/\s+/g, ' ').trim();
+              animeList.push({ title: cleanTitle, episode, thumbnail, link });
+            }
+          });
+        }
+        // Try Fallback selector 3: general .bsx
         else if ($('.bsx').length > 0) {
           console.log('Scraping using fallback selector (.bsx)...');
           $('.bsx').each((_, element) => {
-            const title = $(element).find('a').attr('title')?.trim() || $(element).find('.tt').text().trim();
+            const title = $(element).find('a').attr('oldtitle')?.trim() || 
+                          $(element).find('a').attr('title')?.trim() || 
+                          $(element).find('img').attr('title')?.trim() ||
+                          $(element).find('img').attr('alt')?.trim() ||
+                          $(element).find('.tt').text().trim();
             const link = $(element).find('a').attr('href');
-            const thumbnail = $(element).find('img').attr('src');
-            const episode = $(element).find('.epxs').text().trim();
+            const thumbnail = $(element).find('img').attr('src') || $(element).find('img').attr('data-src');
+            const episode = $(element).find('.epx').text().trim() || $(element).find('.epxs').text().trim();
 
             if (title && link) {
-              animeList.push({ title, episode, thumbnail, link });
+              const cleanTitle = title.replace(/\s+/g, ' ').trim();
+              animeList.push({ title: cleanTitle, episode, thumbnail, link });
             }
           });
         }

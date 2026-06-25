@@ -550,24 +550,31 @@ curl_close($ch);
     }, 100);
   };
 
-  const executeSandboxRequest = async (e?: React.FormEvent) => {
+  const executeSandboxRequest = async (
+    e?: React.FormEvent,
+    overrideEndpoint?: string,
+    overrideParams?: Record<string, string>
+  ) => {
     if (e) e.preventDefault();
     setSandboxLoading(true);
     setSandboxResponse(null);
     setSandboxLatency(null);
     setSandboxStatus(null);
 
+    const endpointToUse = overrideEndpoint || sandboxEndpoint;
+    const paramsToUse = overrideParams || sandboxParams;
+
     const startTime = performance.now();
     try {
       const query = new URLSearchParams();
-      Object.entries(sandboxParams).forEach(([key, val]) => {
+      Object.entries(paramsToUse).forEach(([key, val]) => {
         if (val) {
           query.append(key, val);
         }
       });
 
       const queryString = query.toString();
-      const requestUrl = `${sandboxEndpoint}${queryString ? `?${queryString}` : ''}`;
+      const requestUrl = `${endpointToUse}${queryString ? `?${queryString}` : ''}`;
 
       const res = await fetch(requestUrl);
       const endTime = performance.now();
@@ -591,6 +598,14 @@ curl_close($ch);
     }
   };
 
+  const handleInteractiveLinkClick = (url: string) => {
+    const targetEndpoint = '/api/episode';
+    const targetParams = { url };
+    setSandboxEndpoint(targetEndpoint);
+    setSandboxParams(targetParams);
+    executeSandboxRequest(undefined, targetEndpoint, targetParams);
+  };
+
   const highlightJson = (jsonObj: any): string => {
     if (!jsonObj) return '';
     const jsonStr = JSON.stringify(jsonObj, null, 2);
@@ -608,6 +623,10 @@ curl_close($ch);
             cls = 'text-purple-400 font-semibold'; // key
           } else {
             cls = 'text-emerald-400'; // string
+            const val = match.slice(1, -1);
+            if (val.startsWith('http') && val.includes('samehadaku')) {
+              return `"<span class="underline cursor-pointer text-sky-400 hover:text-sky-300 font-medium interactive-json-link" data-url="${val}">${val}</span>"`;
+            }
           }
         } else if (/true|false/.test(match)) {
           cls = 'text-amber-500'; // boolean
@@ -1105,7 +1124,19 @@ curl_close($ch);
                 ) : null}
 
                 {sandboxResponse ? (
-                  <pre className="whitespace-pre select-text" dangerouslySetInnerHTML={{ __html: highlightJson(sandboxResponse) }} />
+                  <pre 
+                    className="whitespace-pre select-text" 
+                    dangerouslySetInnerHTML={{ __html: highlightJson(sandboxResponse) }} 
+                    onClick={(e) => {
+                      const target = e.target as HTMLElement;
+                      if (target.classList.contains('interactive-json-link')) {
+                        const url = target.getAttribute('data-url');
+                        if (url) {
+                          handleInteractiveLinkClick(url);
+                        }
+                      }
+                    }}
+                  />
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center text-center text-[#404040] gap-1 py-10">
                     <svg className="w-8 h-8 stroke-current" fill="none" viewBox="0 0 24 24">

@@ -1,4 +1,4 @@
-import puppeteer from 'puppeteer-core';
+import puppeteer, { Browser } from 'puppeteer-core';
 import * as fs from 'fs';
 import * as os from 'os';
 
@@ -29,62 +29,11 @@ function getLocalChromePath(): string {
  * Launches a Puppeteer browser instance using puppeteer-core.
  * Connects to remote Browserless.io in production, or launches local Chrome in development.
  */
-export async function launchBrowser() {
-  const termuxUrl = process.env.TERMUX_SERVER_URL; // e.g. http://192.168.x.x:3000
+export async function launchBrowser(): Promise<Browser> {
   const browserlessUrl = process.env.BROWSERLESS_URL;
 
-  // 1. Try Termux Server first if configured
-  if (termuxUrl) {
-    try {
-      const cleanTermuxUrl = termuxUrl.replace(/\/$/, '');
-      console.log(`[Browser Switcher] Checking Termux server at: ${cleanTermuxUrl}`);
-      
-      const res = await fetch(`${cleanTermuxUrl}/endpoint`, { 
-        method: 'GET',
-        signal: AbortSignal.timeout(5000) 
-      });
-      
-      if (res.ok) {
-        const data = await res.json();
-        if (data.wsEndpoint) {
-          // Ensure the WebSocket URL uses the host & protocol from TERMUX_SERVER_URL
-          let finalWsEndpoint = data.wsEndpoint;
-          try {
-            const parsedTermux = new URL(cleanTermuxUrl);
-            const isTls = parsedTermux.protocol === 'https:' || parsedTermux.protocol === 'wss:';
-            const wsProto = isTls ? 'wss:' : 'ws:';
-            
-            // Extract the path e.g. /devtools/browser/...
-            let devtoolsPath = data.wsEndpoint;
-            if (data.wsEndpoint.startsWith('http://') || data.wsEndpoint.startsWith('https://') || data.wsEndpoint.startsWith('ws://') || data.wsEndpoint.startsWith('wss://')) {
-              devtoolsPath = new URL(data.wsEndpoint).pathname;
-            }
-            if (!devtoolsPath.startsWith('/')) {
-              devtoolsPath = '/' + devtoolsPath;
-            }
-            finalWsEndpoint = `${wsProto}//${parsedTermux.host}${devtoolsPath}`;
-          } catch (urlErr) {
-            console.warn('[Browser Switcher] URL parse error, using raw endpoint:', urlErr);
-          }
-
-          console.log(`[Browser Switcher] Connecting to Termux browser at: ${finalWsEndpoint}`);
-          const browser = await puppeteer.connect({ 
-            browserWSEndpoint: finalWsEndpoint
-          });
-          console.log('[Browser Switcher] Successfully connected to Termux browser!');
-          return browser;
-        }
-      }
-      console.log(`[Browser Switcher] Termux server returned invalid response status ${res.status}. Falling back...`);
-    } catch (e) {
-      const err = e as Error;
-      console.log(`[Browser Switcher] Termux connection failed (${err.message}). Falling back to Browserless...`);
-    }
-  }
-
-  // 2. Fallback to Browserless URL
   if (browserlessUrl) {
-    console.log(`Connecting to remote browser at: ${browserlessUrl}`);
+    console.log(`[Browserless] Connecting to: ${browserlessUrl}`);
     return puppeteer.connect({
       browserWSEndpoint: browserlessUrl
     });
@@ -92,7 +41,6 @@ export async function launchBrowser() {
 
   const args = ['--no-sandbox', '--disable-setuid-sandbox'];
 
-  // Conditionally add proxy server argument if configured in environment variables
   if (process.env.PROXY_SERVER) {
     console.log(`Configuring browser proxy-server: ${process.env.PROXY_SERVER}`);
     args.push(`--proxy-server=${process.env.PROXY_SERVER}`);
@@ -109,4 +57,61 @@ export async function launchBrowser() {
     executablePath,
     args
   });
+}
+
+/**
+ * Unified HTML Scraper Helper
+ * 1. Tries Termux HTTP Scraper first (0 Browserless units used, 100% reliable over any tunnel).
+ * 2. If Termux is offline / fails, gracefully falls back to Browserless Puppeteer.
+ */
+export async function scrapeHtml(targetUrl: string, waitSelector?: string): Promise<{ html: string; source: string }> {
+  const termuxUrl = process.env.TERMUX_SERVER_URL;
+
+  // 1. Try Termux HTTP Scraper
+  if (termuxUrl) {
+    try {
+      const cleanTermuxUrl = termuxUrl.replace(/\/$/, '');
+      console.log(`[Switcher] Trying Termux HTTP scraper at: ${cleanTermuxUrl} for ${targetUrl}`);
+      
+      const res = await fetch(`${cleanTermuxUrl}/scrape?url=${encodeURIComponent(targetUrl)}`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(35000)
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.status === 'success' && json.html) {
+          console.log(`[Switcher] Scrape SUCCEEDED via Termux HP (${json.duration_ms}ms)! 0 Browserless units consumed.`);
+          return { html: json.html, source: 'termux' };
+        }
+      }
+      console.warn(`[Switcher] Termux returned status ${res.status}. Falling back to Browserless...`);
+    } catch (err: any) {
+      console.warn(`[Switcher] Termux scrape failed (${err.message}). Falling back to Browserless...`);
+    }
+  }
+
+  // 2. Fallback to Browserless / Local Browser
+  console.log(`[Switcher] Launching Browserless fallback for: ${targetUrl}`);
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    
+    if (waitSelector) {
+      await page.waitForFunction(
+        (sel) => !!document.querySelector(sel),
+        { timeout: 15000 },
+        waitSelector
+      ).catch(() => {});
+    }
+
+    const html = await page.content();
+    await browser.close();
+    return { html, source: process.env.BROWSERLESS_URL ? 'browserless' : 'local' };
+  } catch (err) {
+    await browser.close().catch(() => {});
+    throw err;
+  }
 }

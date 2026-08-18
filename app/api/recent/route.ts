@@ -3,7 +3,7 @@ import * as cheerio from 'cheerio';
 import * as fs from 'fs';
 import * as path from 'path';
 import { resolveDomain, sanitizeSamehadakuUrl } from '@/lib/resolver';
-import { launchBrowser } from '@/lib/browser';
+import { scrapeHtml } from '@/lib/browser';
 import { getFromCache, setToCache, coalesceScrape } from '@/lib/cache';
 import { logRequest } from '@/lib/logger';
 
@@ -61,35 +61,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const successResponse = await coalesceScrape(cacheKey, async () => {
-      let browser;
-      try {
-        // 2. Launch browser using centralized utility
-        browser = await launchBrowser();
+      const targetUrl = activeDomain;
+      console.log(`Scraping recent updates for target URL: ${targetUrl}`);
+      
+      const { html: htmlData } = await scrapeHtml(targetUrl, '.post-show, .animepost, .bsx');
 
-        // 3. Resolve target URL dynamically from the landing page
-        const targetUrl = await resolveDomain(browser);
-
-        // 4. Open target URL and scrape the content
-        const page = await browser.newPage();
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-        
-        console.log(`Navigating to ${targetUrl}...`);
-        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
-        
-        // Wait for at least one expected selector
-        console.log('Waiting for content to load...');
-        await page.waitForFunction(
-          () => !!(document.querySelector('.post-show') || document.querySelector('.animepost') || document.querySelector('.bsx')),
-          { timeout: 20000 }
-        );
-
-        const htmlData = await page.content();
-        await browser.close(); 
-        browser = null; // Mark as closed
-
-        // 5. Parse content using Cheerio
-        const $ = cheerio.load(htmlData);
-        const animeList: AnimeData[] = [];
+      // Parse content using Cheerio
+      const $ = cheerio.load(htmlData);
+      const animeList: AnimeData[] = [];
 
         // Try Primary selector: .post-show ul li
         if ($('.post-show ul li').length > 0) {
@@ -184,39 +163,6 @@ export async function GET(request: NextRequest) {
         await setToCache(cacheKey, responseData, 300);
 
         return responseData;
-      } catch (innerError: any) {
-        if (browser) {
-          try {
-            const pages = await browser.pages(); 
-            if (pages.length > 0) {
-              const activePage = pages[pages.length - 1];
-              
-              // Ensure public dir exists
-              const publicDir = path.join(process.cwd(), 'public');
-              if (!fs.existsSync(publicDir)) {
-                fs.mkdirSync(publicDir, { recursive: true });
-              }
-
-              const screenshotPath = path.join(publicDir, 'debug-recent-error.png');
-              const htmlPath = path.join(publicDir, 'debug-recent-error.html');
-
-              await activePage.screenshot({ path: screenshotPath, fullPage: true });
-              const htmlContent = await activePage.content();
-              fs.writeFileSync(htmlPath, htmlContent);
-
-              console.log(`Diagnostics saved to: ${screenshotPath} and ${htmlPath}`);
-            }
-          } catch (diagError) {
-            console.error("Failed to save scraping error diagnostics:", diagError);
-          }
-          try {
-            await browser.close();
-          } catch (closeError) {
-            console.error("Failed to close browser:", closeError);
-          }
-        }
-        throw innerError;
-      }
     });
 
     const latency = Date.now() - startTime;

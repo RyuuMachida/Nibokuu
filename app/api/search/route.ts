@@ -3,7 +3,7 @@ import * as cheerio from 'cheerio';
 import * as fs from 'fs';
 import * as path from 'path';
 import { resolveDomain, sanitizeSamehadakuUrl } from '@/lib/resolver';
-import { launchBrowser } from '@/lib/browser';
+import { scrapeHtml } from '@/lib/browser';
 import { getFromCache, setToCache, coalesceScrape } from '@/lib/cache';
 import { logRequest } from '@/lib/logger';
 
@@ -78,37 +78,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const successResponse = await coalesceScrape(cacheKey, async () => {
-      let browser;
-      try {
-        // 2. Launch browser using centralized utility
-        browser = await launchBrowser();
+      const searchUrl = `${activeDomain}?s=${encodeURIComponent(query)}`;
+      console.log(`Searching for "${query}" at: ${searchUrl}`);
+      
+      const { html: htmlData } = await scrapeHtml(searchUrl, '.animepost, .bsx, .page-title, .notfound');
 
-        // 3. Resolve active target URL dynamically from the landing page
-        const targetUrl = await resolveDomain(browser);
-
-        // 4. Perform search request
-        const page = await browser.newPage();
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-
-        const searchUrl = `${targetUrl}?s=${encodeURIComponent(query)}`;
-        console.log(`Searching for "${query}" at: ${searchUrl}`);
-        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
-
-        // Wait briefly for content to populate
-        await page.waitForFunction(
-          () => !!(document.querySelector('.animepost') || document.querySelector('article.animpost') || document.querySelector('.bsx') || document.querySelector('.page-title') || document.querySelector('.notfound')),
-          { timeout: 15000 }
-        ).catch((err) => {
-          console.warn('Timeout waiting for search selectors, parsing current DOM state.', err.message);
-        });
-
-        const htmlData = await page.content();
-        await browser.close();
-        browser = null; // Mark as closed
-
-        // 5. Parse search results using Cheerio
-        const $ = cheerio.load(htmlData);
-        const searchResults: SearchResult[] = [];
+      // 5. Parse search results using Cheerio
+      const $ = cheerio.load(htmlData);
+      const searchResults: SearchResult[] = [];
 
         const posts = $('.animepost, .bsx');
         posts.each((_, element) => {
@@ -155,39 +132,6 @@ export async function GET(request: NextRequest) {
         await setToCache(cacheKey, responseData, 86400);
 
         return responseData;
-      } catch (innerError: any) {
-        if (browser) {
-          try {
-            const pages = await browser.pages();
-            if (pages.length > 0) {
-              const activePage = pages[pages.length - 1];
-
-              // Ensure public directory exists
-              const publicDir = path.join(process.cwd(), 'public');
-              if (!fs.existsSync(publicDir)) {
-                fs.mkdirSync(publicDir, { recursive: true });
-              }
-
-              const screenshotPath = path.join(publicDir, 'debug-search-error.png');
-              const htmlPath = path.join(publicDir, 'debug-search-error.html');
-
-              await activePage.screenshot({ path: screenshotPath, fullPage: true });
-              const htmlContent = await activePage.content();
-              fs.writeFileSync(htmlPath, htmlContent);
-
-              console.log(`Diagnostics saved to: ${screenshotPath} and ${htmlPath}`);
-            }
-          } catch (diagError) {
-            console.error("Failed to save search diagnostics:", diagError);
-          }
-          try {
-            await browser.close();
-          } catch (closeError) {
-            console.error("Failed to close browser:", closeError);
-          }
-        }
-        throw innerError;
-      }
     });
 
     const latency = Date.now() - startTime;

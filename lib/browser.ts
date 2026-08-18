@@ -36,25 +36,49 @@ export async function launchBrowser() {
   // 1. Try Termux Server first if configured
   if (termuxUrl) {
     try {
-      console.log(`Checking Termux server at: ${termuxUrl}`);
-      // Use standard fetch available in Node 18+
-      const res = await fetch(`${termuxUrl.replace(/\/$/, '')}/endpoint`, { 
+      const cleanTermuxUrl = termuxUrl.replace(/\/$/, '');
+      console.log(`[Browser Switcher] Checking Termux server at: ${cleanTermuxUrl}`);
+      
+      const res = await fetch(`${cleanTermuxUrl}/endpoint`, { 
         method: 'GET',
-        // short timeout so it doesn't hang if Termux is offline
-        signal: AbortSignal.timeout(3000) 
+        signal: AbortSignal.timeout(5000) 
       });
       
       if (res.ok) {
         const data = await res.json();
         if (data.wsEndpoint) {
-          console.log(`Connecting to Termux browser at: ${data.wsEndpoint}`);
-          return await puppeteer.connect({ browserWSEndpoint: data.wsEndpoint });
+          // Ensure the WebSocket URL uses the host & protocol from TERMUX_SERVER_URL
+          let finalWsEndpoint = data.wsEndpoint;
+          try {
+            const parsedTermux = new URL(cleanTermuxUrl);
+            const isTls = parsedTermux.protocol === 'https:' || parsedTermux.protocol === 'wss:';
+            const wsProto = isTls ? 'wss:' : 'ws:';
+            
+            // Extract the path e.g. /devtools/browser/...
+            let devtoolsPath = data.wsEndpoint;
+            if (data.wsEndpoint.startsWith('http://') || data.wsEndpoint.startsWith('https://') || data.wsEndpoint.startsWith('ws://') || data.wsEndpoint.startsWith('wss://')) {
+              devtoolsPath = new URL(data.wsEndpoint).pathname;
+            }
+            if (!devtoolsPath.startsWith('/')) {
+              devtoolsPath = '/' + devtoolsPath;
+            }
+            finalWsEndpoint = `${wsProto}//${parsedTermux.host}${devtoolsPath}`;
+          } catch (urlErr) {
+            console.warn('[Browser Switcher] URL parse error, using raw endpoint:', urlErr);
+          }
+
+          console.log(`[Browser Switcher] Connecting to Termux browser at: ${finalWsEndpoint}`);
+          const browser = await puppeteer.connect({ 
+            browserWSEndpoint: finalWsEndpoint
+          });
+          console.log('[Browser Switcher] Successfully connected to Termux browser!');
+          return browser;
         }
       }
-      console.log(`Termux server didn't return a valid endpoint. Falling back...`);
+      console.log(`[Browser Switcher] Termux server returned invalid response status ${res.status}. Falling back...`);
     } catch (e) {
       const err = e as Error;
-      console.log(`Failed to connect to Termux server (${err.message}). Falling back...`);
+      console.log(`[Browser Switcher] Termux connection failed (${err.message}). Falling back to Browserless...`);
     }
   }
 

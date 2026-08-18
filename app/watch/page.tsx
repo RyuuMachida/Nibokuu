@@ -269,18 +269,9 @@ function WatchPageContent() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-200 flex flex-col font-sans antialiased text-xs">
-      {/* Global Navigation Header */}
-      <header className="h-12 border-b border-zinc-800 bg-zinc-900 px-4 flex items-center justify-between gap-4 shrink-0">
-        <div className="flex items-center gap-3">
-          <span className="font-semibold text-zinc-100 tracking-tight">Nibokuu Stream</span>
-          <span className="text-zinc-600">/</span>
-          <span className="text-zinc-400 truncate max-w-[200px] sm:max-w-xs">
-            {episodeDetail?.title || selectedAnime?.title || 'Player & Stream Hub'}
-          </span>
-        </div>
-
-        {/* Global Search Bar */}
-        <form onSubmit={handleSearch} className="flex items-center w-64 sm:w-80 border border-zinc-800 bg-zinc-950">
+      {/* Top Header - Search Box Only */}
+      <header className="h-12 border-b border-zinc-800 bg-zinc-900 px-4 flex items-center justify-center shrink-0">
+        <form onSubmit={handleSearch} className="flex items-center w-full max-w-xl border border-zinc-800 bg-zinc-950">
           <input
             type="text"
             placeholder="Cari anime..."
@@ -288,7 +279,7 @@ function WatchPageContent() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-transparent px-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 outline-none"
           />
-          <button type="submit" className="px-3 py-1.5 text-zinc-400 hover:text-zinc-200 border-l border-zinc-800">
+          <button type="submit" className="px-4 py-1.5 text-zinc-400 hover:text-zinc-200 border-l border-zinc-800 text-xs">
             Cari
           </button>
         </form>

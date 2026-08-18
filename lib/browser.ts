@@ -30,11 +30,39 @@ function getLocalChromePath(): string {
  * Connects to remote Browserless.io in production, or launches local Chrome in development.
  */
 export async function launchBrowser() {
-  const remoteUrl = process.env.REMOTE_BROWSER_URL || process.env.BROWSERLESS_URL;
-  if (remoteUrl) {
-    console.log(`Connecting to remote browser at: ${remoteUrl}`);
+  const termuxUrl = process.env.TERMUX_SERVER_URL; // e.g. http://192.168.x.x:3000
+  const browserlessUrl = process.env.BROWSERLESS_URL;
+
+  // 1. Try Termux Server first if configured
+  if (termuxUrl) {
+    try {
+      console.log(`Checking Termux server at: ${termuxUrl}`);
+      // Use standard fetch available in Node 18+
+      const res = await fetch(`${termuxUrl.replace(/\/$/, '')}/endpoint`, { 
+        method: 'GET',
+        // short timeout so it doesn't hang if Termux is offline
+        signal: AbortSignal.timeout(3000) 
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (data.wsEndpoint) {
+          console.log(`Connecting to Termux browser at: ${data.wsEndpoint}`);
+          return await puppeteer.connect({ browserWSEndpoint: data.wsEndpoint });
+        }
+      }
+      console.log(`Termux server didn't return a valid endpoint. Falling back...`);
+    } catch (e) {
+      const err = e as Error;
+      console.log(`Failed to connect to Termux server (${err.message}). Falling back...`);
+    }
+  }
+
+  // 2. Fallback to Browserless URL
+  if (browserlessUrl) {
+    console.log(`Connecting to remote browser at: ${browserlessUrl}`);
     return puppeteer.connect({
-      browserWSEndpoint: remoteUrl
+      browserWSEndpoint: browserlessUrl
     });
   }
 
@@ -48,7 +76,7 @@ export async function launchBrowser() {
 
   const executablePath = getLocalChromePath();
   if (!executablePath) {
-    throw new Error('Local Google Chrome / Chromium installation not found. Please install Chrome or configure REMOTE_BROWSER_URL.');
+    throw new Error('Local Google Chrome / Chromium installation not found. Please install Chrome or configure BROWSERLESS_URL.');
   }
 
   console.log(`Launching local browser from: ${executablePath}`);

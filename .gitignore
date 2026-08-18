@@ -46,5 +46,5 @@ inspect-*.mjs
 inspect-output.txt
 kraken-html.html
 
-
-.vercel
+# termux server (kept local / separate)
+termux-server/
